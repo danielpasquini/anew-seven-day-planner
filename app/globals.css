@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-spectral), ui-serif, Georgia, serif;
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  color-scheme: light;
+  /* warm paper */
+  --background: oklch(0.977 0.009 95);
+  --foreground: oklch(0.26 0.02 155);
+  --card: oklch(0.995 0.004 95);
+  --card-foreground: oklch(0.26 0.02 155);
+  --popover: oklch(0.995 0.004 95);
+  --popover-foreground: oklch(0.26 0.02 155);
+  /* deep pine green */
+  --primary: oklch(0.42 0.055 158);
+  --primary-foreground: oklch(0.98 0.01 95);
+  --secondary: oklch(0.945 0.012 120);
+  --secondary-foreground: oklch(0.34 0.03 158);
+  --muted: oklch(0.95 0.01 110);
+  --muted-foreground: oklch(0.48 0.02 150);
+  --accent: oklch(0.93 0.02 150);
+  --accent-foreground: oklch(0.34 0.04 158);
+  /* muted gold */
+  --gold: oklch(0.72 0.088 78);
+  --gold-foreground: oklch(0.3 0.05 70);
+  --destructive: oklch(0.55 0.16 28);
+  --border: oklch(0.9 0.014 110);
+  --input: oklch(0.9 0.014 110);
+  --ring: oklch(0.42 0.055 158);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/40;
+  }
+  html {
+    @apply bg-background;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
