@@ -1,4 +1,25 @@
 import { NextResponse } from "next/server"
+import { sections } from "@/lib/guide-data"
+
+function buildFieldLabelMap() {
+  const map: Record<string, { sectionTitle: string; label: string }> = {}
+  sections.forEach((sec) => {
+    sec.blocks.forEach((block) => {
+      if (block.type === "fields" && block.fields) {
+        block.fields.forEach((f) => {
+          if (f.kind !== "static") {
+            map[f.id] = { sectionTitle: sec.title, label: f.label }
+          }
+        })
+      } else if (block.type === "ladder" && block.rows) {
+        block.rows.forEach((r) => {
+          map[`${r.id}-nota`] = { sectionTitle: sec.title, label: `Nota para: ${r.label}` }
+        })
+      }
+    })
+  })
+  return map
+}
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +41,19 @@ export async function POST(req: Request) {
       )
     }
 
+    const fieldMap = buildFieldLabelMap()
+
+    const formattedAnswers = textAnswers && typeof textAnswers === "object" && Object.keys(textAnswers).length > 0
+      ? Object.entries(textAnswers)
+          .filter(([, val]) => typeof val === "string" && val.trim() !== "")
+          .map(([id, val]) => {
+            const meta = fieldMap[id]
+            const labelStr = meta ? `[${meta.sectionTitle}] ${meta.label}` : `[Campo ${id}]`
+            return `${labelStr}: "${val}"`
+          })
+          .join("\n")
+      : "Nenhum texto de reflexão foi preenchido."
+
     const promptText = `
 Você é um assistente atencioso, empático e focado na análise objetiva de um Guia de Retomada Semanal de 7 dias.
 
@@ -30,7 +64,7 @@ Total de Tarefas Contáveis: ${snapshot.totalTasks}
 Tarefas Concluídas: ${snapshot.completedTasks}
 Porcentagem de Conclusão: ${snapshot.completionPercentage}%
 
-=== TAREFAS REGISTRADAS ===
+=== TAREFAS REGISTRADAS NO CRONOGRAMA ===
 ${
   Array.isArray(snapshot.taskResults) && snapshot.taskResults.length > 0
     ? snapshot.taskResults
@@ -42,25 +76,20 @@ ${
     : "Nenhuma tarefa cadastrada."
 }
 
-=== RESPOSTAS E REGISTROS ESCRITOS DO USUÁRIO ===
-${
-  textAnswers && typeof textAnswers === "object" && Object.keys(textAnswers).length > 0
-    ? Object.entries(textAnswers)
-        .map(([id, val]) => `[${id}]: ${val}`)
-        .join("\n")
-    : "Nenhum texto adicional preenchido."
-}
+=== RESPOSTAS E REGISTROS ESCRITOS DO USUÁRIO (MENSAGENS/REFLEXÕES POSITIVAS E NEGATIVAS) ===
+${formattedAnswers}
 
 === DIRETRIZES OBRIGATÓRIAS DO VEREDITO E ANÁLISE ===
-1. Avalie estritamente a EXECUÇÃO DA SEMANA (adesão ao plano, categorias realizadas, padrões observados nos dados, pequenos ajustes).
-2. NUNCA avalie o valor pessoal, moral ou dignidade do usuário. Uma porcentagem baixa (30%, 0%) NÃO é falha moral.
-3. LINGUAGEM: acolhedora, respeitosa, encorajadora e serena. NUNCA use linguagem punitiva, de cobrança excessiva ou culpabilização.
-4. PROIBIDO: NUNCA faça diagnósticos clínicos, afirmações de piora/cura de saúde mental, recomendações médicas ou de medicamentos.
-5. Se os dados forem escassos ou insuficientes para conclusões profundas, declare isso com simplicidade e clareza.
+1. ANALISE COM ATENÇÃO OS TEXTOS E REFLEXÕES ESCRITAS DO USUÁRIO: O usuário compartilhou sentimentos, desafios, conquistas e reflexões nas caixas de texto. Você DEVE avaliar e citar explicitamente aspectos desses relatos escritos na análise (por exemplo, em "O que Funcionou Bem", "Pontos de Atenção & Desafios" e "Sugestões").
+2. Avalie estritamente a EXECUÇÃO DA SEMANA (adesão ao plano, conquistas relatadas, dificuldades emocionais ou de rotina expressas pelo usuário, padrões observados nos dados e pequenos ajustes).
+3. NUNCA avalie o valor pessoal, moral ou dignidade do usuário. Uma porcentagem baixa ou relatos de dificuldades NÃO são falhas morais.
+4. LINGUAGEM: acolhedora, respeitosa, encorajadora e serena. NUNCA use linguagem punitiva, de cobrança excessiva ou culpabilização.
+5. PROIBIDO: NUNCA faça diagnósticos clínicos, afirmações de piora/cura de saúde mental, recomendações médicas ou de medicamentos.
+6. Se os dados forem escassos ou insuficientes para conclusões profundas, declare isso com simplicidade e clareza.
 ${
   theologyEnabled === false
-    ? "6. TEOLOGIA DESATIVADA: NÃO inclua qualquer citação bíblica, conceito teológico, vocabulário religioso ou orações nesta análise. Mantenha o tom estritamente comportamental e reflexivo."
-    : "6. TEOLOGIA ATIVA: Se apropriado, pode incluir breves reflexões encorajadoras no tom contemplativo do guia."
+    ? "7. TEOLOGIA DESATIVADA: NÃO inclua qualquer citação bíblica, conceito teológico, vocabulário religioso ou orações nesta análise. Mantenha o tom estritamente comportamental e reflexivo."
+    : "7. TEOLOGIA ATIVA: Se apropriado, pode incluir breves reflexões encorajadoras no tom contemplativo do guia."
 }
 
 Por favor, forneça o resultado no formato JSON estritamente estruturado conforme o schema.
@@ -82,31 +111,31 @@ Por favor, forneça o resultado no formato JSON estritamente estruturado conform
           properties: {
             verdict: {
               type: "STRING",
-              description: "Veredito resumido da execução da semana (1-2 frases acolhedoras e objetivas sobre a adesão ao plano).",
+              description: "Veredito resumido da execução da semana (1-2 frases acolhedoras e objetivas sobre a adesão ao plano e relatos do usuário).",
             },
             summary: {
               type: "STRING",
-              description: "Síntese dos principais destaques do progresso durante a semana.",
+              description: "Síntese dos principais destaques do progresso durante a semana, incluindo reflexões escritas.",
             },
             whatWorked: {
               type: "ARRAY",
               items: { type: "STRING" },
-              description: "Lista de 2 a 4 coisas ou práticas que funcionaram bem.",
+              description: "Lista de 2 a 4 coisas, conquistas ou práticas relatadas que funcionaram bem.",
             },
             difficulties: {
               type: "ARRAY",
               items: { type: "STRING" },
-              description: "Lista de 1 a 3 desafios ou pontos de atenção observados.",
+              description: "Lista de 1 a 3 desafios, ansiedades ou dificuldades expressas nos textos.",
             },
             observedPatterns: {
               type: "ARRAY",
               items: { type: "STRING" },
-              description: "Lista de 1 a 3 padrões comportamentais sustentados pelos dados.",
+              description: "Lista de 1 a 3 padrões comportamentais ou emocionais sustentados pelos dados e relatos.",
             },
             nextWeekSuggestions: {
               type: "ARRAY",
               items: { type: "STRING" },
-              description: "Lista de 2 a 3 sugestões simples e práticas para a próxima semana.",
+              description: "Lista de 2 a 3 sugestões simples e práticas para a próxima semana baseadas nos relatos.",
             },
           },
           required: [
