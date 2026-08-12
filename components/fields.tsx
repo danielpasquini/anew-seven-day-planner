@@ -13,7 +13,8 @@ export function TextField({ id, label }: { id: string; label: string }) {
         type="text"
         value={getText(id)}
         onChange={(e) => setText(id, e.target.value)}
-        className="w-full rounded-md border border-input bg-card px-3 py-2 text-base sm:text-sm text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+        /* font-size 1rem (16px) prevents iOS auto-zoom */
+        className="w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
       />
     </label>
   )
@@ -28,7 +29,8 @@ export function TextAreaField({ id, label }: { id: string; label: string }) {
         value={getText(id)}
         onChange={(e) => setText(id, e.target.value)}
         rows={3}
-        className="w-full resize-y rounded-md border border-input bg-card px-3 py-2 text-base sm:text-sm leading-relaxed text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+        /* font-size 1rem (16px) prevents iOS auto-zoom */
+        className="w-full resize-y rounded-md border border-input bg-card px-3 py-2 text-base leading-relaxed text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
       />
     </label>
   )
@@ -53,7 +55,8 @@ export function ScaleField({ id, label, max = 10 }: { id: string; label: string;
               aria-pressed={active}
               onClick={() => setText(id, active ? "" : String(v))}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg border text-sm font-medium tabular-nums transition touch-manipulation",
+                /* min 44×44 touch target on mobile via min-h */
+                "flex h-9 w-9 min-h-[2.25rem] min-w-[2.25rem] items-center justify-center rounded-lg border text-sm font-medium tabular-nums transition touch-manipulation",
                 active
                   ? "border-primary bg-primary text-primary-foreground shadow-xs font-bold"
                   : "border-input bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -104,7 +107,8 @@ export function CheckField({
         placeholder="0–10"
         value={getText(scaleId)}
         onChange={(e) => setText(scaleId, e.target.value)}
-        className="w-16 rounded-md border border-input bg-background px-2.5 py-1.5 text-center text-sm tabular-nums text-foreground outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+        /* 16px to prevent iOS zoom */
+        className="w-16 rounded-md border border-input bg-background px-2.5 py-1.5 text-base text-center tabular-nums text-foreground outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
       />
     </div>
   )

@@ -27,13 +27,10 @@ import {
   useStore,
   PALETTES,
   type WeekInstance,
-  type ThemeMode,
-  type ColorPalette,
 } from "@/lib/store"
 import {
   formatDateRangeBR,
   getTodayFormatted,
-  calculateInclusiveEndDate,
   getWeekDays,
 } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
@@ -161,16 +158,26 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     .sort((a, b) => a.order - b.order || a.time.localeCompare(b.time))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-modal-title"
+    >
       {/* Container */}
-      <div className="relative flex flex-col w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] bg-card text-card-foreground border-0 sm:border border-border rounded-none sm:rounded-2xl shadow-2xl overflow-hidden">
-        
+      <div
+        className="relative flex flex-col w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] bg-card text-card-foreground border-0 sm:border border-border rounded-none sm:rounded-2xl shadow-2xl overflow-hidden"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3 sm:px-6">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="size-5 text-primary shrink-0" />
+            <Sparkles className="size-5 text-primary shrink-0" aria-hidden="true" />
             <div>
-              <h2 className="font-serif text-lg font-semibold text-foreground truncate">
+              <h2 id="settings-modal-title" className="font-serif text-base sm:text-lg font-semibold text-foreground truncate">
                 Configurações do Aplicativo
               </h2>
               <p className="text-xs text-muted-foreground hidden sm:block">
@@ -181,16 +188,15 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
+            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation min-w-[2.5rem] min-h-[2.5rem] flex items-center justify-center"
             aria-label="Fechar configurações"
           >
-            <X className="size-5" />
+            <X className="size-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Modal Layout: Sidebar Navigation + Main Content Area */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-          
           {/* Navigation Bar / Tabs */}
           <nav
             aria-label="Abas de configuração"
@@ -200,15 +206,15 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               type="button"
               onClick={() => setActiveTab("semanas")}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap",
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
                 activeTab === "semanas"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
-              <Calendar className="size-4 shrink-0" />
+              <Calendar className="size-4 shrink-0" aria-hidden="true" />
               <span>1. Semanas</span>
-              <span className="ml-auto text-[0.65rem] opacity-80 hidden md:inline">
+              <span className="ml-auto text-[0.65rem] font-medium hidden md:inline">
                 ({weeks.length})
               </span>
             </button>
@@ -217,13 +223,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               type="button"
               onClick={() => setActiveTab("programacao")}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap",
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
                 activeTab === "programacao"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
-              <Clock className="size-4 shrink-0" />
+              <Clock className="size-4 shrink-0" aria-hidden="true" />
               <span>2. Programação</span>
             </button>
 
@@ -231,13 +237,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               type="button"
               onClick={() => setActiveTab("aparencia")}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap",
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
                 activeTab === "aparencia"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
-              <Palette className="size-4 shrink-0" />
+              <Palette className="size-4 shrink-0" aria-hidden="true" />
               <span>3. Aparência</span>
             </button>
 
@@ -245,20 +251,19 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               type="button"
               onClick={() => setActiveTab("exportacao")}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap",
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
                 activeTab === "exportacao"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
-              <Download className="size-4 shrink-0" />
+              <Download className="size-4 shrink-0" aria-hidden="true" />
               <span>4. Exportação</span>
             </button>
           </nav>
 
           {/* Main Content Body */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-            
             {/* TAB 1: SEMANAS */}
             {activeTab === "semanas" && (
               <div className="space-y-6">
@@ -278,7 +283,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   </h4>
                   <form onSubmit={handleCreateWeek} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-5 space-y-1">
-                      <label className="text-xs font-medium text-foreground">
+                      <label className="text-xs font-medium text-foreground block">
                         Nome da Semana
                       </label>
                       <input
@@ -286,28 +291,30 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         placeholder={`Ex: Semana ${weeks.length + 1}`}
                         value={newWeekTitle}
                         onChange={(e) => setNewWeekTitle(e.target.value)}
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        /* font-size 16px to prevent iOS auto-zoom */
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
                     <div className="sm:col-span-4 space-y-1">
-                      <label className="text-xs font-medium text-foreground">
+                      <label className="text-xs font-medium text-foreground block">
                         Data de Início
                       </label>
                       <input
                         type="date"
                         value={newWeekStartDate}
                         onChange={(e) => setNewWeekStartDate(e.target.value)}
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        /* font-size 16px to prevent iOS auto-zoom */
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
                     <div className="sm:col-span-3">
                       <button
                         type="submit"
-                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
+                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                       >
-                        <Plus className="size-3.5" />
+                        <Plus className="size-4" aria-hidden="true" />
                         <span>Criar Semana</span>
                       </button>
                     </div>
@@ -318,7 +325,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {deletingWeek && (
                   <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 space-y-3">
                     <div className="flex items-start gap-3">
-                      <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" />
+                      <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
                       <div>
                         <h4 className="text-sm font-semibold text-destructive">
                           Confirmar exclusão da &quot;{deletingWeek.title}&quot;?
@@ -332,14 +339,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={() => setDeletingWeek(null)}
-                        className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition"
+                        className="rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:bg-accent transition touch-manipulation"
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         onClick={handleConfirmDeleteWeek}
-                        className="rounded-md bg-destructive px-3 py-1.5 text-xs font-semibold text-white hover:bg-destructive/90 transition shadow-xs"
+                        className="rounded-md bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90 transition shadow-xs touch-manipulation"
                       >
                         Sim, Excluir Semana
                       </button>
@@ -369,7 +376,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           )}
                         >
                           <div className="space-y-1 min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-serif text-sm font-semibold text-foreground">
                                 {w.title}
                               </span>
@@ -382,8 +389,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                             <p className="text-xs text-muted-foreground">
                               Período: <span className="font-medium text-foreground">{rangeStr}</span>
                             </p>
-                            <div className="flex items-center gap-2 pt-1">
-                              <div className="w-32 bg-secondary rounded-full h-1.5 overflow-hidden">
+                            <div className="flex items-center gap-2 pt-1 flex-wrap">
+                              <div className="w-28 sm:w-32 bg-secondary rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className="bg-primary h-full transition-all duration-300"
                                   style={{ width: `${w.progresso.percentual}%` }}
@@ -400,7 +407,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                               <button
                                 type="button"
                                 onClick={() => selectWeek(w.id)}
-                                className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition touch-manipulation"
+                                className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation min-h-[2.25rem]"
                               >
                                 Ativar Esta
                               </button>
@@ -410,10 +417,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                               <button
                                 type="button"
                                 onClick={() => setDeletingWeek(w)}
-                                className="rounded-md border border-border p-1.5 text-muted-foreground hover:border-destructive hover:text-destructive hover:bg-destructive/10 transition touch-manipulation"
+                                className="rounded-md border border-border p-2 text-muted-foreground hover:border-destructive hover:text-destructive hover:bg-destructive/10 transition touch-manipulation min-w-[2.25rem] min-h-[2.25rem] flex items-center justify-center"
                                 title="Excluir semana"
+                                aria-label={`Excluir ${w.title}`}
                               >
-                                <Trash2 className="size-4" />
+                                <Trash2 className="size-4" aria-hidden="true" />
                               </button>
                             )}
                           </div>
@@ -449,7 +457,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         type="button"
                         onClick={() => setSelectedDayIndex(d.dayIndex)}
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition whitespace-nowrap touch-manipulation",
+                          "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition whitespace-nowrap touch-manipulation min-h-[2.25rem]",
                           isSel
                             ? "bg-primary text-primary-foreground font-bold shadow-xs"
                             : "bg-muted/40 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -472,24 +480,26 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   </h4>
                   <form onSubmit={handleAddActivity} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-3 space-y-1">
-                      <label className="text-xs font-medium text-foreground">Horário</label>
+                      <label className="text-xs font-medium text-foreground block">Horário</label>
                       <input
                         type="text"
                         placeholder="Ex: 16:30"
                         value={newActTime}
                         onChange={(e) => setNewActTime(e.target.value)}
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        /* font-size 16px to prevent iOS auto-zoom */
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
                     <div className="sm:col-span-6 space-y-1">
-                      <label className="text-xs font-medium text-foreground">Descrição da Tarefa</label>
+                      <label className="text-xs font-medium text-foreground block">Descrição da Tarefa</label>
                       <input
                         type="text"
                         placeholder="Ex: Ativação 15 min / Saída"
                         value={newActDesc}
                         onChange={(e) => setNewActDesc(e.target.value)}
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        /* font-size 16px to prevent iOS auto-zoom */
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
@@ -497,9 +507,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="submit"
                         disabled={!newActDesc.trim()}
-                        className="w-full flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50 transition touch-manipulation"
+                        className="w-full flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition touch-manipulation min-h-[2.5rem]"
                       >
-                        <Plus className="size-3.5" />
+                        <Plus className="size-4" aria-hidden="true" />
                         <span>Adicionar</span>
                       </button>
                     </div>
@@ -532,30 +542,31 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                   type="text"
                                   value={editActTime}
                                   onChange={(e) => setEditActTime(e.target.value)}
-                                  className="sm:col-span-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium"
+                                  className="sm:col-span-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
                                   placeholder="Horário"
                                 />
                                 <input
                                   type="text"
                                   value={editActDesc}
                                   onChange={(e) => setEditActDesc(e.target.value)}
-                                  className="sm:col-span-7 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium"
+                                  className="sm:col-span-7 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
                                   placeholder="Descrição"
                                 />
                                 <div className="sm:col-span-2 flex items-center gap-1">
                                   <button
                                     type="button"
                                     onClick={() => handleSaveEdit(act.id)}
-                                    className="flex-1 rounded bg-primary py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                                    className="flex-1 rounded bg-primary py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 touch-manipulation"
                                   >
                                     Salvar
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setEditingActId(null)}
-                                    className="rounded border border-border p-1.5 text-xs text-muted-foreground hover:bg-accent"
+                                    className="rounded border border-border p-2 text-xs text-muted-foreground hover:bg-accent touch-manipulation"
+                                    aria-label="Cancelar edição"
                                   >
-                                    <X className="size-3.5" />
+                                    <X className="size-4" aria-hidden="true" />
                                   </button>
                                 </div>
                               </div>
@@ -582,37 +593,41 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 type="button"
                                 onClick={() => moveScheduleActivity(act.id, "up")}
                                 disabled={index === 0}
-                                className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition"
+                                className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition touch-manipulation"
                                 title="Mover para cima"
+                                aria-label="Mover para cima"
                               >
-                                <ArrowUp className="size-3.5" />
+                                <ArrowUp className="size-4" aria-hidden="true" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => moveScheduleActivity(act.id, "down")}
                                 disabled={index === dayActivities.length - 1}
-                                className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition"
+                                className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition touch-manipulation"
                                 title="Mover para baixo"
+                                aria-label="Mover para baixo"
                               >
-                                <ArrowDown className="size-3.5" />
+                                <ArrowDown className="size-4" aria-hidden="true" />
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => handleStartEdit(act.id, act.time, act.description)}
-                                className="p-1 text-muted-foreground hover:text-primary transition"
+                                className="p-1.5 text-muted-foreground hover:text-primary transition touch-manipulation"
                                 title="Editar atividade"
+                                aria-label={`Editar: ${act.description}`}
                               >
-                                <Edit2 className="size-3.5" />
+                                <Edit2 className="size-4" aria-hidden="true" />
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => deleteScheduleActivity(act.id)}
-                                className="p-1 text-muted-foreground hover:text-destructive transition"
+                                className="p-1.5 text-muted-foreground hover:text-destructive transition touch-manipulation"
                                 title="Excluir atividade"
+                                aria-label={`Excluir: ${act.description}`}
                               >
-                                <Trash2 className="size-3.5" />
+                                <Trash2 className="size-4" aria-hidden="true" />
                               </button>
                             </div>
                           </div>
@@ -653,11 +668,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           : "border-border bg-card hover:border-primary/40"
                       )}
                     >
-                      <Sun className="size-5 text-amber-500 dark:text-amber-400 shrink-0" />
+                      <Sun className="size-5 text-amber-500 shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-semibold text-foreground">Claro</span>
-                          {theme === "light" && <Check className="size-3.5 text-primary" />}
+                          {theme === "light" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
                         <p className="text-[0.7rem] text-muted-foreground">Fundo papel aquecido</p>
                       </div>
@@ -673,11 +688,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           : "border-border bg-card hover:border-primary/40"
                       )}
                     >
-                      <Moon className="size-5 text-indigo-500 dark:text-indigo-300 shrink-0" />
+                      <Moon className="size-5 text-indigo-400 shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-semibold text-foreground">Escuro</span>
-                          {theme === "dark" && <Check className="size-3.5 text-primary" />}
+                          {theme === "dark" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
                         <p className="text-[0.7rem] text-muted-foreground">Confortável para a noite</p>
                       </div>
@@ -693,11 +708,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           : "border-border bg-card hover:border-primary/40"
                       )}
                     >
-                      <Monitor className="size-5 text-muted-foreground dark:text-foreground shrink-0" />
+                      <Monitor className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-semibold text-foreground">Sistema</span>
-                          {theme === "system" && <Check className="size-3.5 text-primary" />}
+                          {theme === "system" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
                         <p className="text-[0.7rem] text-muted-foreground">Segue o seu dispositivo</p>
                       </div>
@@ -733,7 +748,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                             </span>
                             {isSel && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[0.65rem] font-bold text-primary">
-                                <Check className="size-3" /> Ativa
+                                <Check className="size-3" aria-hidden="true" /> Ativa
                               </span>
                             )}
                           </div>
@@ -767,7 +782,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                             </span>
                           </div>
 
-                          <p className="text-[0.7rem] text-muted-foreground/80 leading-relaxed">
+                          <p className="text-[0.7rem] text-muted-foreground leading-relaxed">
                             {p.description}
                           </p>
                         </button>
@@ -803,20 +818,20 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     <button
                       type="button"
                       onClick={() => setImportStatus(null)}
-                      className="p-1 opacity-80 hover:opacity-100"
+                      className="p-1 text-muted-foreground hover:text-foreground"
+                      aria-label="Fechar mensagem"
                     >
-                      <X className="size-3.5" />
+                      <X className="size-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 gap-4">
-                  
                   {/* Option 1: PDF Print */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <Printer className="size-5" />
+                        <Printer className="size-5" aria-hidden="true" />
                       </div>
                       <div>
                         <h4 className="text-sm font-semibold text-foreground">
@@ -830,9 +845,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     <button
                       type="button"
                       onClick={() => window.print()}
-                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0"
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                     >
-                      <Printer className="size-3.5" />
+                      <Printer className="size-4" aria-hidden="true" />
                       <span>Imprimir / Salvar PDF</span>
                     </button>
                   </div>
@@ -841,7 +856,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <FileText className="size-5" />
+                        <FileText className="size-5" aria-hidden="true" />
                       </div>
                       <div>
                         <h4 className="text-sm font-semibold text-foreground">
@@ -855,9 +870,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     <button
                       type="button"
                       onClick={exportToMarkdown}
-                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0"
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                     >
-                      <FileText className="size-3.5" />
+                      <FileText className="size-4" aria-hidden="true" />
                       <span>Baixar Markdown (.md)</span>
                     </button>
                   </div>
@@ -866,7 +881,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <Database className="size-5" />
+                        <Database className="size-5" aria-hidden="true" />
                       </div>
                       <div>
                         <h4 className="text-sm font-semibold text-foreground">
@@ -882,9 +897,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={exportToJSON}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
                       >
-                        <Download className="size-3.5" />
+                        <Download className="size-4" aria-hidden="true" />
                         <span>Baixar Backup (.json)</span>
                       </button>
 
@@ -899,35 +914,32 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-secondary/80 transition touch-manipulation"
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/80 transition touch-manipulation min-h-[2.5rem]"
                       >
-                        <Upload className="size-3.5" />
+                        <Upload className="size-4" aria-hidden="true" />
                         <span>Restaurar Backup</span>
                       </button>
                     </div>
                   </div>
-
                 </div>
               </div>
             )}
-
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between border-t border-border bg-muted/40 px-4 py-3 sm:px-6">
-          <span className="text-[0.7rem] text-muted-foreground">
+        <div className="flex items-center justify-between border-t border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
+          <span className="text-xs text-muted-foreground truncate max-w-[60%]">
             {activeWeek ? `Semana em exibição: ${activeWeek.title}` : ""}
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation"
+            className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.25rem]"
           >
             Concluído
           </button>
         </div>
-
       </div>
     </div>
   )

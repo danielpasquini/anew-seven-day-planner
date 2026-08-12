@@ -44,26 +44,37 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-week-title"
+    >
       <div
         className="fixed inset-0 bg-foreground/40 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
-        <div className="flex items-center justify-between pb-4">
+      <div
+        className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-border bg-card p-5 sm:p-6 shadow-2xl"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 1.25rem))" }}
+      >
+        <div className="flex items-center justify-between pb-4 border-b border-border mb-4">
           <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Calendar className="size-4" />
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+              <Calendar className="size-4" aria-hidden="true" />
             </div>
-            <h3 className="font-serif text-lg font-semibold text-foreground">Criar Nova Semana</h3>
+            <h3 id="create-week-title" className="font-serif text-lg font-semibold text-foreground">
+              Criar Nova Semana
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition"
+            aria-label="Fechar"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
           >
-            <X className="size-4" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -78,7 +89,8 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="ex: Semana 2 ou Semana Especial"
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+              /* font-size 1rem (16px) prevents iOS auto-zoom */
+              className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-base text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             />
           </div>
 
@@ -91,7 +103,8 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
               required
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+              /* font-size 1rem (16px) prevents iOS auto-zoom */
+              className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-base text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             />
           </div>
 
@@ -106,13 +119,13 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition"
+              className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground shadow-xs hover:bg-primary/90 transition"
+              className="rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
             >
               Criar Semana
             </button>
@@ -142,19 +155,29 @@ export function DeleteWeekModal({ week, isOpen, onClose }: DeleteModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-week-title"
+    >
       <div
         className="fixed inset-0 bg-foreground/40 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
+      <div
+        className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-border bg-card p-5 sm:p-6 shadow-2xl"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 1.25rem))" }}
+      >
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-            <AlertTriangle className="size-5" />
+            <AlertTriangle className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="font-serif text-lg font-semibold text-foreground">Excluir Semana?</h3>
+            <h3 id="delete-week-title" className="font-serif text-lg font-semibold text-foreground">
+              Excluir Semana?
+            </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Você está prestes a excluir <strong className="text-foreground">{week.title}</strong> ({rangeFormatted}).
             </p>
@@ -168,14 +191,14 @@ export function DeleteWeekModal({ week, isOpen, onClose }: DeleteModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition"
+            className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleDelete}
-            className="rounded-md bg-destructive px-4 py-2 text-xs font-medium text-primary-foreground shadow-xs hover:bg-destructive/90 transition"
+            className="rounded-md bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground shadow-xs hover:bg-destructive/90 transition touch-manipulation"
           >
             Confirmar Exclusão
           </button>

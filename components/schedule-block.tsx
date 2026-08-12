@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Check } from "lucide-react"
+import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Check, X } from "lucide-react"
 import { useStore, type ScheduleActivity } from "@/lib/store"
 import { getWeekDays } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
@@ -46,6 +46,11 @@ export function InteractiveScheduleBlock() {
     setAddingForDay(null)
   }
 
+  const handleClose = () => {
+    setAddingForDay(null)
+    setEditingAct(null)
+  }
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault()
     if (!descInput.trim()) return
@@ -64,9 +69,9 @@ export function InteractiveScheduleBlock() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 7-Day Grid / Card Layout */}
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7">
+    <div className="space-y-4">
+      {/* 7-Day Grid — responsive: 1 col → 2 col → 3 col → 7 col */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {days.map((day) => {
           const dayActs = activities
             .filter((a) => a.dayIndex === day.dayIndex)
@@ -88,17 +93,18 @@ export function InteractiveScheduleBlock() {
                 <button
                   type="button"
                   onClick={() => handleOpenAdd(day.dayIndex)}
-                  title="Adicionar atividade"
-                  className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition"
+                  title={`Adicionar atividade em ${day.dayNumberLabel}`}
+                  aria-label={`Adicionar atividade em ${day.dayNumberLabel}`}
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation"
                 >
-                  <Plus className="size-3.5" />
+                  <Plus className="size-3.5" aria-hidden="true" />
                 </button>
               </div>
 
               {/* Day Activities List */}
-              <div className="flex-1 space-y-2 min-h-[100px]">
+              <div className="flex-1 space-y-2 min-h-[5rem]">
                 {dayActs.length === 0 ? (
-                  <p className="py-4 text-center text-xs italic text-muted-foreground/60">Sem atividades</p>
+                  <p className="py-4 text-center text-xs italic text-muted-foreground">Sem atividades</p>
                 ) : (
                   dayActs.map((act, index) => {
                     const done = isDone(act.id)
@@ -116,15 +122,16 @@ export function InteractiveScheduleBlock() {
                           <button
                             type="button"
                             aria-pressed={done}
+                            aria-label={done ? `Desmarcar: ${act.description}` : `Marcar como feito: ${act.description}`}
                             onClick={() => toggleDone(act.id)}
                             className={cn(
-                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition",
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition touch-manipulation",
                               done
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-input hover:border-primary"
                             )}
                           >
-                            {done && <Check className="size-2.5" strokeWidth={3} />}
+                            {done && <Check className="size-2.5" strokeWidth={3} aria-hidden="true" />}
                           </button>
 
                           <div className="min-w-0 flex-1">
@@ -137,41 +144,52 @@ export function InteractiveScheduleBlock() {
                           </div>
                         </div>
 
-                        {/* Actions Toolbar */}
-                        <div className="mt-1.5 flex items-center justify-end gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                        {/*
+                          Actions toolbar:
+                          - Mobile (touch): always visible (opacity-100)
+                          - Desktop: visible on hover via group-hover (opacity-0 → opacity-100)
+                          Uses @media(hover:none) workaround via sm: prefix for coarse pointer devices
+                        */}
+                        <div className="mt-1.5 flex items-center justify-end gap-1 transition
+                          opacity-100 sm:opacity-0 sm:group-hover:opacity-100
+                          [@media(hover:none)]:opacity-100">
                           <button
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "up")}
                             disabled={index === 0}
                             title="Mover para cima"
-                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            aria-label="Mover para cima"
+                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                           >
-                            <ArrowUp className="size-3" />
+                            <ArrowUp className="size-3" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "down")}
                             disabled={index === dayActs.length - 1}
                             title="Mover para baixo"
-                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            aria-label="Mover para baixo"
+                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                           >
-                            <ArrowDown className="size-3" />
+                            <ArrowDown className="size-3" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(act)}
                             title="Editar"
-                            className="p-0.5 text-muted-foreground hover:text-primary"
+                            aria-label={`Editar: ${act.description}`}
+                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-primary touch-manipulation"
                           >
-                            <Edit2 className="size-3" />
+                            <Edit2 className="size-3" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteScheduleActivity(act.id)}
                             title="Excluir"
-                            className="p-0.5 text-muted-foreground hover:text-destructive"
+                            aria-label={`Excluir: ${act.description}`}
+                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-destructive touch-manipulation"
                           >
-                            <Trash2 className="size-3" />
+                            <Trash2 className="size-3" aria-hidden="true" />
                           </button>
                         </div>
                       </div>
@@ -180,34 +198,50 @@ export function InteractiveScheduleBlock() {
                 )}
               </div>
 
-              {/* Quick Add Button per day */}
+              {/* Quick Add Button */}
               <button
                 type="button"
                 onClick={() => handleOpenAdd(day.dayIndex)}
-                className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/80 py-1.5 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition"
+                aria-label={`Adicionar atividade em ${day.dayNumberLabel}`}
+                className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/80 py-2 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition touch-manipulation"
               >
-                <Plus className="size-3" /> Adicionar
+                <Plus className="size-3" aria-hidden="true" /> Adicionar
               </button>
             </div>
           )
         })}
       </div>
 
-      {/* Add / Edit Activity Form Modal */}
+      {/* Add / Edit Activity Modal */}
       {(addingForDay !== null || editingAct !== null) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={editingAct ? "Editar Atividade" : "Nova Atividade"}
+        >
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
-            onClick={() => {
-              setAddingForDay(null)
-              setEditingAct(null)
-            }}
+            onClick={handleClose}
             aria-hidden="true"
           />
-          <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl sm:p-6">
-            <h4 className="mb-4 font-serif text-lg font-semibold text-foreground">
-              {editingAct ? "Editar Atividade" : "Nova Atividade"}
-            </h4>
+          <div
+            className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-border bg-card p-5 shadow-xl sm:p-6"
+            style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 1.25rem))" }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-serif text-lg font-semibold text-foreground">
+                {editingAct ? "Editar Atividade" : "Nova Atividade"}
+              </h4>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Fechar"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </div>
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
@@ -217,7 +251,8 @@ export function InteractiveScheduleBlock() {
                 <select
                   value={daySelect}
                   onChange={(e) => setDaySelect(Number(e.target.value))}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  /* 16px prevents iOS zoom */
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 >
                   {days.map((d) => (
                     <option key={d.dayIndex} value={d.dayIndex}>
@@ -236,7 +271,8 @@ export function InteractiveScheduleBlock() {
                   placeholder="Ex: 16:30"
                   value={timeInput}
                   onChange={(e) => setTimeInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  /* 16px prevents iOS zoom */
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
 
@@ -250,24 +286,22 @@ export function InteractiveScheduleBlock() {
                   placeholder="Descrição da atividade..."
                   value={descInput}
                   onChange={(e) => setDescInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  /* 16px prevents iOS zoom */
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAddingForDay(null)
-                    setEditingAct(null)
-                  }}
-                  className="rounded-md border border-input px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent"
+                  onClick={handleClose}
+                  className="rounded-md border border-input px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent touch-manipulation"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                  className="rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 touch-manipulation"
                 >
                   {editingAct ? "Salvar Alterações" : "Adicionar Tarefa"}
                 </button>
