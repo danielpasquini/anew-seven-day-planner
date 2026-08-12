@@ -24,6 +24,7 @@ export function InteractiveScheduleBlock() {
   const [timeInput, setTimeInput] = useState("")
   const [descInput, setDescInput] = useState("")
   const [daySelect, setDaySelect] = useState<number>(0)
+  const [countsTowardCompletion, setCountsTowardCompletion] = useState<boolean>(true)
 
   if (!activeWeek) return null
 
@@ -35,6 +36,7 @@ export function InteractiveScheduleBlock() {
     setDaySelect(dayIndex)
     setTimeInput("16:30")
     setDescInput("")
+    setCountsTowardCompletion(true)
     setEditingAct(null)
   }
 
@@ -43,6 +45,7 @@ export function InteractiveScheduleBlock() {
     setDaySelect(act.dayIndex)
     setTimeInput(act.time)
     setDescInput(act.description)
+    setCountsTowardCompletion(act.countsTowardCompletion !== false)
     setAddingForDay(null)
   }
 
@@ -60,10 +63,11 @@ export function InteractiveScheduleBlock() {
         dayIndex: daySelect,
         time: timeInput || "12:00",
         description: descInput,
+        countsTowardCompletion,
       })
       setEditingAct(null)
     } else if (addingForDay !== null) {
-      addScheduleActivity(daySelect, timeInput || "12:00", descInput)
+      addScheduleActivity(daySelect, timeInput || "12:00", descInput, countsTowardCompletion)
       setAddingForDay(null)
     }
   }
@@ -108,6 +112,7 @@ export function InteractiveScheduleBlock() {
                 ) : (
                   dayActs.map((act, index) => {
                     const done = isDone(act.id)
+                    const isNonCountable = act.countsTowardCompletion === false
                     return (
                       <div
                         key={act.id}
@@ -135,21 +140,23 @@ export function InteractiveScheduleBlock() {
                           </button>
 
                           <div className="min-w-0 flex-1">
-                            <span className="inline-block font-mono text-[10px] font-medium text-primary/80">
-                              {act.time}
-                            </span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="font-mono text-[10px] font-medium text-primary/80">
+                                {act.time}
+                              </span>
+                              {isNonCountable && (
+                                <span className="rounded bg-muted px-1 py-0.2 text-[9px] text-muted-foreground">
+                                  Informativa
+                                </span>
+                              )}
+                            </div>
                             <p className={cn("leading-snug break-words text-foreground", done && "line-through text-muted-foreground")}>
                               {act.description}
                             </p>
                           </div>
                         </div>
 
-                        {/*
-                          Actions toolbar:
-                          - Mobile (touch): always visible (opacity-100)
-                          - Desktop: visible on hover via group-hover (opacity-0 → opacity-100)
-                          Uses @media(hover:none) workaround via sm: prefix for coarse pointer devices
-                        */}
+                        {/* Actions toolbar */}
                         <div className="mt-1.5 flex items-center justify-end gap-1 transition
                           opacity-100 sm:opacity-0 sm:group-hover:opacity-100
                           [@media(hover:none)]:opacity-100">
@@ -289,6 +296,19 @@ export function InteractiveScheduleBlock() {
                   /* 16px prevents iOS zoom */
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="countsTowardCompletion"
+                  checked={countsTowardCompletion}
+                  onChange={(e) => setCountsTowardCompletion(e.target.checked)}
+                  className="size-4 rounded border-input text-primary focus:ring-primary"
+                />
+                <label htmlFor="countsTowardCompletion" className="text-xs font-medium text-foreground cursor-pointer">
+                  Esta atividade conta para a porcentagem de conclusão da semana
+                </label>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

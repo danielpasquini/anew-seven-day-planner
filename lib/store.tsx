@@ -98,24 +98,55 @@ export type ScheduleActivity = {
   time: string // e.g., "16:30"
   description: string
   order: number
+  countsTowardCompletion?: boolean // defaults to true
+}
+
+export type WeekStatus = "active" | "completed"
+
+export type TaskResultItem = {
+  id: string
+  description: string
+  time?: string
+  dayIndex: number
+  done: boolean
+  countsTowardCompletion: boolean
+}
+
+export type CompletionSnapshot = {
+  totalTasks: number
+  completedTasks: number
+  completionPercentage: number
+  taskResults: TaskResultItem[]
+  completedAt: string
+}
+
+export type AIReview = {
+  verdict: string
+  summary: string
+  whatWorked: string[]
+  difficulties: string[]
+  observedPatterns: string[]
+  nextWeekSuggestions: string[]
+  generatedAt: string
+  analysisVersion: number
 }
 
 export function getDefaultScheduleActivities(): ScheduleActivity[] {
   return [
-    { id: "act-0-1", dayIndex: 0, time: "16:30", description: "Preparar caderno + duas escadas / Ativação 15 min", order: 0 },
-    { id: "act-0-2", dayIndex: 0, time: "17:00", description: "Saída: degrau 1", order: 1 },
-    { id: "act-0-3", dayIndex: 0, time: "21:30", description: "Escrita livre 5 min", order: 2 },
-    { id: "act-1-1", dayIndex: 1, time: "16:30", description: "Trabalho: pista externa nível 1", order: 0 },
-    { id: "act-1-2", dayIndex: 1, time: "17:00", description: "Repetir saída", order: 1 },
-    { id: "act-2-1", dayIndex: 2, time: "16:30", description: "Julgamento proporcional", order: 0 },
-    { id: "act-2-2", dayIndex: 2, time: "21:30", description: "Escrita livre 5 min", order: 1 },
-    { id: "act-3-1", dayIndex: 3, time: "16:30", description: "Relacionamento: 4 colunas", order: 0 },
-    { id: "act-3-2", dayIndex: 3, time: "17:00", description: "Saída: mesmo/pequeno avanço", order: 1 },
-    { id: "act-4-1", dayIndex: 4, time: "16:30", description: "Discriminação de ameaça", order: 0 },
-    { id: "act-5-1", dayIndex: 5, time: "16:30", description: "Vínculo + competência", order: 0 },
-    { id: "act-5-2", dayIndex: 5, time: "17:00", description: "Saída", order: 1 },
-    { id: "act-5-3", dayIndex: 5, time: "21:30", description: "Escrita livre 5 min", order: 2 },
-    { id: "act-6-1", dayIndex: 6, time: "16:30", description: "Revisão semanal 30 min", order: 0 },
+    { id: "act-0-1", dayIndex: 0, time: "16:30", description: "Preparar caderno + duas escadas / Ativação 15 min", order: 0, countsTowardCompletion: true },
+    { id: "act-0-2", dayIndex: 0, time: "17:00", description: "Saída: degrau 1", order: 1, countsTowardCompletion: true },
+    { id: "act-0-3", dayIndex: 0, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
+    { id: "act-1-1", dayIndex: 1, time: "16:30", description: "Trabalho: pista externa nível 1", order: 0, countsTowardCompletion: true },
+    { id: "act-1-2", dayIndex: 1, time: "17:00", description: "Repetir saída", order: 1, countsTowardCompletion: true },
+    { id: "act-2-1", dayIndex: 2, time: "16:30", description: "Julgamento proporcional", order: 0, countsTowardCompletion: true },
+    { id: "act-2-2", dayIndex: 2, time: "21:30", description: "Escrita livre 5 min", order: 1, countsTowardCompletion: true },
+    { id: "act-3-1", dayIndex: 3, time: "16:30", description: "Relacionamento: 4 colunas", order: 0, countsTowardCompletion: true },
+    { id: "act-3-2", dayIndex: 3, time: "17:00", description: "Saída: mesmo/pequeno avanço", order: 1, countsTowardCompletion: true },
+    { id: "act-4-1", dayIndex: 4, time: "16:30", description: "Discriminação de ameaça", order: 0, countsTowardCompletion: true },
+    { id: "act-5-1", dayIndex: 5, time: "16:30", description: "Vínculo + competência", order: 0, countsTowardCompletion: true },
+    { id: "act-5-2", dayIndex: 5, time: "17:00", description: "Saída", order: 1, countsTowardCompletion: true },
+    { id: "act-5-3", dayIndex: 5, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
+    { id: "act-6-1", dayIndex: 6, time: "16:30", description: "Revisão semanal 30 min", order: 0, countsTowardCompletion: true },
   ]
 }
 
@@ -128,6 +159,12 @@ export type WeekInstance = {
   endDate: string   // YYYY-MM-DD (7th day inclusive)
   createdAt: string // ISO date string
   updatedAt: string // ISO date string
+  status: WeekStatus
+  completedAt?: string | null
+  completionSnapshot?: CompletionSnapshot | null
+  aiReview?: AIReview | null
+  aiReviewVersion?: number
+  aiReviewOutdated?: boolean
   data: WeekData
   programacao: {
     dias: number
@@ -136,7 +173,7 @@ export type WeekInstance = {
   progresso: WeekProgress
 }
 
-type StoreDataV2 = {
+type StoreDataV3 = {
   schemaVersion: number
   weeks: WeekInstance[]
   activeWeekId: string
@@ -151,6 +188,11 @@ type StoreValue = {
   createWeek: (customTitle?: string, customStartDate?: string, templateId?: string) => void
   deleteWeek: (id: string) => void
   updateWeekMeta: (id: string, updates: { title?: string; startDate?: string }) => void
+  completeWeek: (id: string) => Promise<void>
+  reopenWeek: (id: string) => void
+  generateAIReview: (id: string) => Promise<void>
+  isGeneratingAI: boolean
+  aiError: string | null
   prevWeek: () => void
   nextWeek: () => void
   hasPrevWeek: boolean
@@ -161,10 +203,10 @@ type StoreValue = {
   toggleDone: (id: string, value?: boolean) => void
   doneCount: (ids: string[]) => number
   resetActiveWeek: () => void
-  addScheduleActivity: (dayIndex: number, time: string, description: string) => void
+  addScheduleActivity: (dayIndex: number, time: string, description: string, countsTowardCompletion?: boolean) => void
   updateScheduleActivity: (
     id: string,
-    updates: { dayIndex?: number; time?: string; description?: string; order?: number }
+    updates: { dayIndex?: number; time?: string; description?: string; order?: number; countsTowardCompletion?: boolean }
   ) => void
   deleteScheduleActivity: (id: string) => void
   moveScheduleActivity: (id: string, direction: "up" | "down") => void
@@ -185,6 +227,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>("light")
   const [palette, setPaletteState] = useState<ColorPalette>("sage")
   const [ready, setReady] = useState(false)
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Load theme and palette on client side
@@ -253,7 +297,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(
           STORAGE_KEY_V2,
           JSON.stringify({
-            schemaVersion: 2,
+            schemaVersion: 3,
             weeks: nextWeeks,
             activeWeekId: nextActiveId,
           })
@@ -265,32 +309,69 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const computeProgress = useCallback((data: WeekData, activities?: ScheduleActivity[]): WeekProgress => {
-    const acts = activities ?? []
+    const acts = (activities ?? []).filter((a) => a.countsTowardCompletion !== false)
     const total = acts.length
     const concluidas = acts.reduce((acc, act) => acc + (data.done[act.id] ? 1 : 0), 0)
     const percentual = total > 0 ? Math.round((concluidas / total) * 100) : 0
     return { total, concluidas, percentual }
   }, [])
 
-  // Initialize and load from localStorage
+  const createSnapshot = useCallback((w: WeekInstance): CompletionSnapshot => {
+    const activities = w.programacao?.activities || []
+    const taskResults: TaskResultItem[] = activities.map((a) => ({
+      id: a.id,
+      description: a.description,
+      time: a.time,
+      dayIndex: a.dayIndex,
+      done: Boolean(w.data.done[a.id]),
+      countsTowardCompletion: a.countsTowardCompletion !== false,
+    }))
+
+    const countable = taskResults.filter((t) => t.countsTowardCompletion)
+    const totalTasks = countable.length
+    const completedTasks = countable.filter((t) => t.done).length
+    const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    const nowIso = new Date().toISOString()
+
+    return {
+      totalTasks,
+      completedTasks,
+      completionPercentage,
+      taskResults,
+      completedAt: nowIso,
+    }
+  }, [])
+
+  // Initialize and load from localStorage with migration to schema v3
   useEffect(() => {
     try {
       const rawV2 = localStorage.getItem(STORAGE_KEY_V2)
       if (rawV2) {
-        const parsed = JSON.parse(rawV2) as StoreDataV2
+        const parsed = JSON.parse(rawV2) as StoreDataV3
         if (parsed.weeks && parsed.weeks.length > 0) {
           const formattedWeeks = parsed.weeks.map((w) => {
             const data = w.data ?? { text: {}, done: {} }
-            const acts =
+            const rawActs =
               w.programacao?.activities && w.programacao.activities.length > 0
                 ? w.programacao.activities
                 : getDefaultScheduleActivities()
+
+            const acts = rawActs.map((a) => ({
+              ...a,
+              countsTowardCompletion: a.countsTowardCompletion !== false,
+            }))
 
             return {
               ...w,
               guideId: w.guideId || w.templateId || DEFAULT_GUIDE_TEMPLATE.id,
               templateId: w.templateId || w.guideId || DEFAULT_GUIDE_TEMPLATE.id,
               updatedAt: w.updatedAt || w.createdAt || new Date().toISOString(),
+              status: w.status || "active",
+              completedAt: w.completedAt || null,
+              completionSnapshot: w.completionSnapshot || null,
+              aiReview: w.aiReview || null,
+              aiReviewVersion: w.aiReviewVersion || 1,
+              aiReviewOutdated: Boolean(w.aiReviewOutdated),
               programacao: {
                 dias: 7,
                 activities: acts,
@@ -337,6 +418,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         endDate: calculateInclusiveEndDate(today),
         createdAt: nowIso,
         updatedAt: nowIso,
+        status: "active",
+        completedAt: null,
+        completionSnapshot: null,
+        aiReview: null,
+        aiReviewVersion: 1,
+        aiReviewOutdated: false,
         data: legacyData,
         programacao: {
           dias: 7,
@@ -350,7 +437,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(
         STORAGE_KEY_V2,
         JSON.stringify({
-          schemaVersion: 2,
+          schemaVersion: 3,
           weeks: [initialWeek],
           activeWeekId: "week-1",
         })
@@ -408,6 +495,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const newId = `week-${Date.now()}`
         const nowIso = new Date().toISOString()
         const initialData = { text: {}, done: {} }
+        const defaultActs = getDefaultScheduleActivities()
 
         const newWeek: WeekInstance = {
           id: newId,
@@ -418,12 +506,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           endDate,
           createdAt: nowIso,
           updatedAt: nowIso,
+          status: "active",
+          completedAt: null,
+          completionSnapshot: null,
+          aiReview: null,
+          aiReviewVersion: 1,
+          aiReviewOutdated: false,
           data: initialData,
           programacao: {
             dias: 7,
-            activities: getDefaultScheduleActivities(),
+            activities: defaultActs,
           },
-          progresso: computeProgress(initialData, getDefaultScheduleActivities()),
+          progresso: computeProgress(initialData, defaultActs),
         }
 
         const updatedWeeks = [...prevWeeks, newWeek].sort((a, b) =>
@@ -456,6 +550,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             endDate: calculateInclusiveEndDate(today),
             createdAt: nowIso,
             updatedAt: nowIso,
+            status: "active",
+            completedAt: null,
+            completionSnapshot: null,
+            aiReview: null,
+            aiReviewVersion: 1,
+            aiReviewOutdated: false,
             data: emptyData,
             programacao: {
               dias: 7,
@@ -511,6 +611,115 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [activeWeekId, persist]
   )
 
+  // AI Review Generator Function (calls server-side API)
+  const generateAIReview = useCallback(
+    async (weekId: string) => {
+      const targetWeek = weeks.find((w) => w.id === weekId)
+      if (!targetWeek || !targetWeek.completionSnapshot) return
+
+      setIsGeneratingAI(true)
+      setAiError(null)
+
+      try {
+        const res = await fetch("/api/analyze-week", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            weekTitle: targetWeek.title,
+            startDate: targetWeek.startDate,
+            endDate: targetWeek.endDate,
+            snapshot: targetWeek.completionSnapshot,
+            textAnswers: targetWeek.data.text,
+            theologyEnabled: true, // Default guide template uses theology
+          }),
+        })
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}))
+          throw new Error(errJson.error || "Falha na comunicação com o servidor para análise inteligência.")
+        }
+
+        const reviewData: AIReview = await res.json()
+
+        setWeeks((prev) => {
+          const nowIso = new Date().toISOString()
+          const next = prev.map((w) => {
+            if (w.id !== weekId) return w
+            return {
+              ...w,
+              updatedAt: nowIso,
+              aiReview: reviewData,
+              aiReviewVersion: (w.aiReviewVersion || 1) + 1,
+              aiReviewOutdated: false,
+            }
+          })
+          persist(next, activeWeekId)
+          return next
+        })
+      } catch (err: any) {
+        console.error("AI Review Generation Error:", err)
+        setAiError(err?.message || "Análise indisponível no momento.")
+      } finally {
+        setIsGeneratingAI(false)
+      }
+    },
+    [weeks, activeWeekId, persist]
+  )
+
+  // Complete Week Handler
+  const completeWeek = useCallback(
+    async (id: string) => {
+      let snapshotToUse: CompletionSnapshot | null = null
+
+      setWeeks((prev) => {
+        const nowIso = new Date().toISOString()
+        const next = prev.map((w) => {
+          if (w.id !== id) return w
+          const snapshot = createSnapshot(w)
+          snapshotToUse = snapshot
+          return {
+            ...w,
+            status: "completed" as WeekStatus,
+            completedAt: snapshot.completedAt,
+            completionSnapshot: snapshot,
+            aiReviewOutdated: false,
+            updatedAt: nowIso,
+          }
+        })
+        persist(next, activeWeekId)
+        return next
+      })
+
+      // Trigger AI review asynchronously; failure does not affect completion status
+      if (snapshotToUse) {
+        await generateAIReview(id)
+      }
+    },
+    [createSnapshot, generateAIReview, activeWeekId, persist]
+  )
+
+  // Reopen Completed Week
+  const reopenWeek = useCallback(
+    (id: string) => {
+      setWeeks((prev) => {
+        const nowIso = new Date().toISOString()
+        const next = prev.map((w) => {
+          if (w.id !== id) return w
+          return {
+            ...w,
+            status: "active" as WeekStatus,
+            updatedAt: nowIso,
+          }
+        })
+        persist(next, activeWeekId)
+        return next
+      })
+    },
+    [activeWeekId, persist]
+  )
+
   const activeIndex = useMemo(() => {
     if (!activeWeek) return -1
     return sortedWeeks.findIndex((w) => w.id === activeWeek.id)
@@ -560,6 +769,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             data: nextData,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(nextData, w.programacao.activities),
           }
         })
@@ -599,6 +809,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             data: nextData,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(nextData, w.programacao.activities),
           }
         })
@@ -610,7 +821,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   )
 
   const addScheduleActivity = useCallback(
-    (dayIndex: number, time: string, description: string) => {
+    (dayIndex: number, time: string, description: string, countsTowardCompletion = true) => {
       if (!activeWeek) return
       const currentWeekId = activeWeek.id
       setWeeks((prevWeeks) => {
@@ -627,6 +838,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             time: time.trim() || "12:00",
             description: description.trim(),
             order: nextOrder,
+            countsTowardCompletion,
           }
 
           const newActivities = [...currentActivities, newActivity]
@@ -639,6 +851,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -652,7 +865,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const updateScheduleActivity = useCallback(
     (
       id: string,
-      updates: { dayIndex?: number; time?: string; description?: string; order?: number }
+      updates: { dayIndex?: number; time?: string; description?: string; order?: number; countsTowardCompletion?: boolean }
     ) => {
       if (!activeWeek) return
       const currentWeekId = activeWeek.id
@@ -669,6 +882,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               ...(updates.time !== undefined && { time: updates.time }),
               ...(updates.description !== undefined && { description: updates.description }),
               ...(updates.order !== undefined && { order: updates.order }),
+              ...(updates.countsTowardCompletion !== undefined && { countsTowardCompletion: updates.countsTowardCompletion }),
             }
           })
 
@@ -681,6 +895,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -711,6 +926,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -757,6 +973,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
+            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
             progresso: computeProgress(w.data, currentActivities),
           }
         })
@@ -784,6 +1001,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return {
           ...w,
           data: { text: {}, done: {} },
+          aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
         }
       })
       persist(nextWeeks, currentWeekId)
@@ -796,8 +1014,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const rangeStr = formatDateRangeBR(activeWeek.startDate, activeWeek.endDate)
     let md = `# ${DEFAULT_GUIDE_TEMPLATE.title}\n`
     md += `## ${activeWeek.title} (${rangeStr})\n\n`
+    md += `**Status:** ${activeWeek.status === "completed" ? "Concluída" : "Em andamento"}\n`
+    if (activeWeek.completedAt) {
+      md += `**Concluída em:** ${new Date(activeWeek.completedAt).toLocaleString("pt-BR")}\n`
+    }
     md += `**Data de Criação:** ${new Date(activeWeek.createdAt).toLocaleDateString("pt-BR")}\n`
     md += `**Progresso da Semana:** ${activeWeek.progresso.concluidas} de ${activeWeek.progresso.total} tarefas concluídas (${activeWeek.progresso.percentual}%)\n\n`
+
+    if (activeWeek.aiReview) {
+      md += `---\n\n`
+      md += `### Análise Inteligente & Veredito da Semana\n\n`
+      md += `**Veredito:** ${activeWeek.aiReview.verdict}\n\n`
+      md += `**Resumo:** ${activeWeek.aiReview.summary}\n\n`
+      md += `**O que funcionou bem:**\n`
+      activeWeek.aiReview.whatWorked.forEach((item) => (md += `- ${item}\n`))
+      md += `\n**Dificuldades observadas:**\n`
+      activeWeek.aiReview.difficulties.forEach((item) => (md += `- ${item}\n`))
+      md += `\n**Padrões observados:**\n`
+      activeWeek.aiReview.observedPatterns.forEach((item) => (md += `- ${item}\n`))
+      md += `\n**Sugestões para a próxima semana:**\n`
+      activeWeek.aiReview.nextWeekSuggestions.forEach((item) => (md += `- ${item}\n`))
+      md += `\n`
+    }
 
     md += `---\n\n`
     md += `### Programação Semanal de Atividades\n\n`
@@ -815,7 +1053,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } else {
         dayActs.forEach((act) => {
           const done = activeWeek.data.done[act.id] ? "[X]" : "[ ]"
-          md += `- ${done} **${act.time}** — ${act.description}\n`
+          const extra = act.countsTowardCompletion === false ? " (Informativa)" : ""
+          md += `- ${done} **${act.time}** — ${act.description}${extra}\n`
         })
         md += `\n`
       }
@@ -856,7 +1095,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const exportToJSON = useCallback(() => {
     const exportData = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       exportedAt: new Date().toISOString(),
       theme,
       palette,
@@ -880,11 +1119,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!parsed || !Array.isArray(parsed.weeks) || parsed.weeks.length === 0) {
           return false
         }
-        setWeeks(parsed.weeks)
-        if (parsed.activeWeekId && parsed.weeks.some((w: WeekInstance) => w.id === parsed.activeWeekId)) {
+        const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => ({
+          ...w,
+          status: w.status || "active",
+          completedAt: w.completedAt || null,
+          completionSnapshot: w.completionSnapshot || null,
+          aiReview: w.aiReview || null,
+          aiReviewVersion: w.aiReviewVersion || 1,
+          aiReviewOutdated: Boolean(w.aiReviewOutdated),
+          programacao: {
+            dias: 7,
+            activities: (w.programacao?.activities || getDefaultScheduleActivities()).map((a: any) => ({
+              ...a,
+              countsTowardCompletion: a.countsTowardCompletion !== false,
+            })),
+          },
+        }))
+        setWeeks(formattedWeeks)
+        if (parsed.activeWeekId && formattedWeeks.some((w) => w.id === parsed.activeWeekId)) {
           setActiveWeekId(parsed.activeWeekId)
         } else {
-          setActiveWeekId(parsed.weeks[0].id)
+          setActiveWeekId(formattedWeeks[0].id)
         }
         if (parsed.theme && ["light", "dark", "system"].includes(parsed.theme)) {
           setTheme(parsed.theme)
@@ -892,7 +1147,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.palette && ["sage", "terracotta", "blue", "graphite", "olive"].includes(parsed.palette)) {
           setPalette(parsed.palette)
         }
-        persist(parsed.weeks, parsed.activeWeekId || parsed.weeks[0].id)
+        persist(formattedWeeks, parsed.activeWeekId || formattedWeeks[0].id)
         return true
       } catch {
         return false
@@ -911,6 +1166,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createWeek,
       deleteWeek,
       updateWeekMeta,
+      completeWeek,
+      reopenWeek,
+      generateAIReview,
+      isGeneratingAI,
+      aiError,
       prevWeek,
       nextWeek,
       hasPrevWeek,
@@ -941,6 +1201,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createWeek,
       deleteWeek,
       updateWeekMeta,
+      completeWeek,
+      reopenWeek,
+      generateAIReview,
+      isGeneratingAI,
+      aiError,
       prevWeek,
       nextWeek,
       hasPrevWeek,

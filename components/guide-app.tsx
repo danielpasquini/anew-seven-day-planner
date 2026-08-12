@@ -15,6 +15,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react"
 import { DEFAULT_GUIDE_TEMPLATE, intro, sections } from "@/lib/guide-data"
 import { useStore, type WeekInstance } from "@/lib/store"
@@ -23,6 +25,8 @@ import { cn } from "@/lib/utils"
 import { SectionCard } from "@/components/section-card"
 import { CreateWeekModal, DeleteWeekModal } from "@/components/week-modal"
 import { SettingsModal } from "@/components/settings-modal"
+import { CompleteWeekModal } from "@/components/complete-week-modal"
+import { WeekReviewCard } from "@/components/week-review-card"
 
 export function GuideApp() {
   const {
@@ -41,6 +45,7 @@ export function GuideApp() {
   const [navOpen, setNavOpen] = useState(false)
   const [weeksDrawerOpen, setWeeksDrawerOpen] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [completeModalOpen, setCompleteModalOpen] = useState(false)
   const [weekToDelete, setWeekToDelete] = useState<WeekInstance | null>(null)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">("semanas")
@@ -122,14 +127,20 @@ export function GuideApp() {
               <button
                 type="button"
                 onClick={() => setWeeksDrawerOpen(true)}
-                className="flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15 transition touch-manipulation max-w-[7rem] sm:max-w-[12rem]"
+                className="flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15 transition touch-manipulation max-w-[8rem] sm:max-w-[14rem]"
                 title="Trocar de semana"
               >
                 <Calendar className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
                 <span className="truncate">{activeWeek.title}</span>
-                <span className="hidden lg:inline text-[0.7rem] font-normal text-primary/70 shrink-0">
-                  ({dateRangeStr})
-                </span>
+                {activeWeek.status === "completed" ? (
+                  <span className="rounded bg-primary/20 text-[0.65rem] px-1 py-0.2 font-bold shrink-0">
+                    Concluída · {activeWeek.progresso.percentual}%
+                  </span>
+                ) : (
+                  <span className="hidden lg:inline text-[0.7rem] font-normal text-primary/70 shrink-0">
+                    ({dateRangeStr})
+                  </span>
+                )}
               </button>
 
               <button
@@ -152,6 +163,21 @@ export function GuideApp() {
 
           {/* Right Action Controls */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Completar semana button (if active) */}
+            {activeWeek && activeWeek.status === "active" && (
+              <button
+                type="button"
+                onClick={() => setCompleteModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 touch-manipulation min-h-[2rem]"
+                title="Concluir formalmente a semana"
+                aria-label="Completar semana"
+              >
+                <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Completar semana</span>
+                <span className="sm:hidden">Completar</span>
+              </button>
+            )}
+
             {/* Theme toggle — icon only on mobile */}
             <button
               type="button"
@@ -166,7 +192,7 @@ export function GuideApp() {
               {theme === "light" && <Sun className="size-3.5 text-amber-500 shrink-0" aria-hidden="true" />}
               {theme === "dark" && <Moon className="size-3.5 text-indigo-400 shrink-0" aria-hidden="true" />}
               {theme === "system" && <Monitor className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />}
-              <span className="hidden sm:inline text-xs font-semibold capitalize">
+              <span className="hidden md:inline text-xs font-semibold capitalize">
                 {theme === "light" ? "Claro" : theme === "dark" ? "Escuro" : "Sistema"}
               </span>
             </button>
@@ -183,29 +209,18 @@ export function GuideApp() {
               aria-label="Configurações"
             >
               <Settings className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden sm:inline text-xs font-semibold">Configurações</span>
+              <span className="hidden md:inline text-xs font-semibold">Configurações</span>
             </button>
 
             {/* Nova Semana */}
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 touch-manipulation"
+              className="hidden lg:flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
               aria-label="Nova semana"
             >
               <Plus className="size-3.5" aria-hidden="true" />
               <span>Nova Semana</span>
-            </button>
-
-            {/* Reiniciar — desktop only */}
-            <button
-              type="button"
-              onClick={handleReset}
-              className="hidden lg:flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-destructive/40 hover:text-destructive touch-manipulation"
-              title="Limpar respostas desta semana"
-            >
-              <RotateCcw className="size-3.5" aria-hidden="true" />
-              <span>Reiniciar</span>
             </button>
 
             {/* Mobile: Weeks drawer */}
@@ -235,12 +250,17 @@ export function GuideApp() {
 
       {/* Hero Section */}
       <div id="topo" className="scroll-mt-16 border-b border-border bg-secondary/40">
-        <div className="mx-auto max-w-3xl px-4 py-8 text-center sm:px-6 sm:py-16">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold-foreground">
+        <div className="mx-auto max-w-3xl px-4 py-8 text-center sm:px-6 sm:py-14">
+          <div className="mb-4 inline-flex items-center gap-2 flex-wrap justify-center rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold-foreground">
             <Calendar className="size-3" aria-hidden="true" />
             <span>
               {activeWeek ? `${activeWeek.title} · ${dateRangeStr}` : "Período de 7 dias"}
             </span>
+            {activeWeek?.status === "completed" && (
+              <span className="rounded bg-primary/20 text-primary px-2 py-0.2 text-[0.65rem] font-bold">
+                Concluída · {activeWeek.progresso.percentual}%
+              </span>
+            )}
           </div>
 
           <h1 className="font-serif text-2xl font-semibold leading-tight text-primary text-balance sm:text-4xl md:text-5xl">
@@ -249,6 +269,20 @@ export function GuideApp() {
           <p className="mx-auto mt-3 max-w-xl font-serif text-sm italic leading-relaxed text-foreground/90 text-pretty sm:text-base sm:mt-4 md:text-lg">
             {intro.subtitle}
           </p>
+
+          {/* Action button in Hero if week is active */}
+          {activeWeek && activeWeek.status === "active" && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCompleteModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition touch-manipulation"
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                <span>Completar esta semana</span>
+              </button>
+            </div>
+          )}
 
           <div className="mx-auto mt-6 max-w-xl rounded-xl border border-primary/15 bg-card p-4 text-left shadow-xs sm:mt-8 sm:p-6">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary/80">Oração de abertura</p>
@@ -297,6 +331,7 @@ export function GuideApp() {
             <div className="mt-3 space-y-1.5 max-h-[28vh] overflow-y-auto pr-1">
               {weeks.map((w) => {
                 const isActive = w.id === activeWeek?.id
+                const isCompleted = w.status === "completed"
                 const range = formatDateRangeBR(w.startDate, w.endDate)
 
                 return (
@@ -319,8 +354,13 @@ export function GuideApp() {
                           {w.title}
                         </span>
                         {isActive && (
-                          <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[0.6rem] font-bold">
+                          <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.2 text-[0.6rem] font-bold">
                             Atual
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="rounded bg-primary/15 text-primary px-1.5 py-0.2 text-[0.6rem] font-medium">
+                            Concluída · {w.progresso.percentual}%
                           </span>
                         )}
                       </div>
@@ -376,6 +416,9 @@ export function GuideApp() {
 
         {/* Main Content Sections */}
         <main className="min-w-0 flex-1 space-y-6 sm:space-y-8">
+          {/* Week Review Card (when completed) */}
+          <WeekReviewCard />
+
           {sections.map((s) => (
             <SectionCard key={s.id} section={s} />
           ))}
@@ -433,6 +476,7 @@ export function GuideApp() {
               <div className="space-y-2">
                 {weeks.map((w) => {
                   const isActive = w.id === activeWeek?.id
+                  const isCompleted = w.status === "completed"
                   const range = formatDateRangeBR(w.startDate, w.endDate)
 
                   return (
@@ -462,6 +506,11 @@ export function GuideApp() {
                           {isActive && (
                             <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[0.65rem] font-bold">
                               Ativa
+                            </span>
+                          )}
+                          {isCompleted && (
+                            <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[0.65rem] font-medium">
+                              Concluída · {w.progresso.percentual}%
                             </span>
                           )}
                         </div>
@@ -564,6 +613,11 @@ export function GuideApp() {
         week={weekToDelete}
         isOpen={Boolean(weekToDelete)}
         onClose={() => setWeekToDelete(null)}
+      />
+
+      <CompleteWeekModal
+        isOpen={completeModalOpen}
+        onClose={() => setCompleteModalOpen(false)}
       />
 
       <SettingsModal
