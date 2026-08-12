@@ -1,0 +1,8 @@
+{
+  "name": "Guia de Retomada",
+  "description": "Guia de Retomada — recomeçar com clareza, constância e esperança. Um plano pessoal de 14 dias com exercícios, Escritura e acompanhamento diário.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
