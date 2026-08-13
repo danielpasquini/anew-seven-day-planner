@@ -1153,23 +1153,97 @@ export const scheduleTaskIds: string[] = sections.flatMap((s) =>
   }),
 )
 
+export type ScheduleActivityItem = {
+  id: string
+  dayIndex: number
+  time: string
+  description: string
+  order: number
+  countsTowardCompletion?: boolean
+}
+
+export type CompletionConfig = {
+  enabled: boolean
+  reviewTitle: string
+  analysisDimensions: string[]
+  nextWeekFocusRules: string[]
+  theologyReviewEnabled: boolean
+}
+
 export type GuideTemplate = {
   id: string
   title: string
   description: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  schemaVersion: number
+  config: {
+    targetAudience?: string
+    category?: string
+  }
   intro: typeof intro
   sections: Section[]
   scheduleTaskIds: string[]
+  weeklyPlan: ScheduleActivityItem[]
+  quickSheets?: { id: string; title: string; summary: string }[]
+  theologyEnabled: boolean
+  completionConfig: CompletionConfig
 }
 
 export const DEFAULT_GUIDE_TEMPLATE: GuideTemplate = {
   id: "meu-guia-retomada",
   title: "Meu Guia de Retomada",
   description: "Plano pessoal de trabalho com esquemas, exercícios e Escritura",
+  version: 1,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-08-13T00:00:00.000Z",
+  schemaVersion: 1,
+  config: {
+    targetAudience: "Pessoas em busca de clareza, constância e reestruturação pessoal",
+    category: "Retomada & Esquemas",
+  },
   intro,
   sections,
   scheduleTaskIds,
+  weeklyPlan: [
+    { id: "act-0-1", dayIndex: 0, time: "16:30", description: "Preparar caderno + duas escadas / Ativação 15 min", order: 0, countsTowardCompletion: true },
+    { id: "act-0-2", dayIndex: 0, time: "17:00", description: "Saída: degrau 1", order: 1, countsTowardCompletion: true },
+    { id: "act-0-3", dayIndex: 0, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
+    { id: "act-1-1", dayIndex: 1, time: "16:30", description: "Trabalho: pista externa nível 1", order: 0, countsTowardCompletion: true },
+    { id: "act-1-2", dayIndex: 1, time: "17:00", description: "Repetir saída", order: 1, countsTowardCompletion: true },
+    { id: "act-2-1", dayIndex: 2, time: "16:30", description: "Julgamento proporcional", order: 0, countsTowardCompletion: true },
+    { id: "act-2-2", dayIndex: 2, time: "21:30", description: "Escrita livre 5 min", order: 1, countsTowardCompletion: true },
+    { id: "act-3-1", dayIndex: 3, time: "16:30", description: "Relacionamento: 4 colunas", order: 0, countsTowardCompletion: true },
+    { id: "act-3-2", dayIndex: 3, time: "17:00", description: "Saída: mesmo/pequeno avanço", order: 1, countsTowardCompletion: true },
+    { id: "act-4-1", dayIndex: 4, time: "16:30", description: "Discriminação de ameaça", order: 0, countsTowardCompletion: true },
+    { id: "act-5-1", dayIndex: 5, time: "16:30", description: "Vínculo + competência", order: 0, countsTowardCompletion: true },
+    { id: "act-5-2", dayIndex: 5, time: "17:00", description: "Saída", order: 1, countsTowardCompletion: true },
+    { id: "act-5-3", dayIndex: 5, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
+    { id: "act-6-1", dayIndex: 6, time: "16:30", description: "Revisão semanal 30 min", order: 0, countsTowardCompletion: true },
+  ],
+  quickSheets: [
+    { id: "qs-esquemas", title: "Ficha de Esquemas", summary: "Identificação rápida de esquemas ativados e evitação." },
+    { id: "qs-ativacao", title: "Ativação Comportamental", summary: "Passos graduais de 15 minutos para sair da paralisia." },
+  ],
+  theologyEnabled: true,
+  completionConfig: {
+    enabled: true,
+    reviewTitle: "Veredito e Análise da Semana de Retomada",
+    analysisDimensions: [
+      "Adesão às atividades planejadas no cronograma semanal",
+      "Identificação e manejo de esquemas e padrões de evitação",
+      "Percepções e sentimentos registrados nas caixas de reflexão",
+      "Constância nas rotinas matinais e noturnas"
+    ],
+    nextWeekFocusRules: [
+      "Ajustes graduais e sustentáveis para a rotina semanal",
+      "Reforçar práticas que trouxeram clareza e redução da ansiedade"
+    ],
+    theologyReviewEnabled: true,
+  },
 }
 
 export const GUIDE_TEMPLATES: GuideTemplate[] = [DEFAULT_GUIDE_TEMPLATE]
+
 

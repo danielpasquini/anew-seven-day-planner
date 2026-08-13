@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react"
-import { DEFAULT_GUIDE_TEMPLATE, sections } from "@/lib/guide-data"
+import { DEFAULT_GUIDE_TEMPLATE, GUIDE_TEMPLATES, type GuideTemplate, type CompletionConfig, sections } from "@/lib/guide-data"
 import { calculateInclusiveEndDate, getNextDayDate, getTodayFormatted, getWeekDays, formatDateRangeBR } from "@/lib/date-utils"
 
 const STORAGE_KEY_V2 = "guia-retomada-v2"
@@ -150,10 +150,19 @@ export function getDefaultScheduleActivities(): ScheduleActivity[] {
   ]
 }
 
+export type GuideTemplateSnapshot = {
+  id: string
+  title: string
+  version: number
+  completionConfig: CompletionConfig
+}
+
 export type WeekInstance = {
   id: string
   guideId: string
   templateId: string
+  guideVersion?: number
+  guideSnapshot?: GuideTemplateSnapshot | null
   title: string
   startDate: string // YYYY-MM-DD
   endDate: string   // YYYY-MM-DD (7th day inclusive)
@@ -173,14 +182,20 @@ export type WeekInstance = {
   progresso: WeekProgress
 }
 
-type StoreDataV3 = {
-  schemaVersion: number
+type StoreDataV4 = {
+  schemaVersion: 4
+  guides: GuideTemplate[]
+  activeGuideId: string
   weeks: WeekInstance[]
   activeWeekId: string
 }
 
 type StoreValue = {
   ready: boolean
+  guides: GuideTemplate[]
+  activeGuide: GuideTemplate
+  activeGuideId: string
+  selectGuide: (id: string) => void
   weeks: WeekInstance[]
   activeWeek: WeekInstance | null
   activeWeekId: string | null
@@ -223,6 +238,8 @@ type StoreValue = {
 const StoreContext = createContext<StoreValue | null>(null)
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const [guides, setGuides] = useState<GuideTemplate[]>(GUIDE_TEMPLATES)
+  const [activeGuideId, setActiveGuideId] = useState<string>(DEFAULT_GUIDE_TEMPLATE.id)
   const [weeks, setWeeks] = useState<WeekInstance[]>([])
   const [activeWeekId, setActiveWeekId] = useState<string | null>(null)
   const [theme, setThemeState] = useState<ThemeMode>("light")
@@ -291,14 +308,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  const persist = useCallback((nextWeeks: WeekInstance[], nextActiveId: string | null) => {
+  const persist = useCallback((nextWeeks: WeekInstance[], nextActiveId: string | null, nextGuides = guides, nextGuideId = activeGuideId) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       try {
         localStorage.setItem(
           STORAGE_KEY_V2,
           JSON.stringify({
-            schemaVersion: 3,
+            schemaVersion: 4,
+            guides: nextGuides,
+            activeGuideId: nextGuideId,
             weeks: nextWeeks,
             activeWeekId: nextActiveId,
           })
@@ -307,7 +326,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         // ignore quota error
       }
     }, 150)
-  }, [])
+  }, [guides, activeGuideId])
 
   const computeProgress = useCallback((data: WeekData, activities?: ScheduleActivity[]): WeekProgress => {
     const acts = (activities ?? []).filter((a) => a.countsTowardCompletion !== false)
@@ -343,29 +362,49 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Initialize and load from localStorage with migration to schema v3
+  // Initialize and load from localStorage with migration to schema v4
   useEffect(() => {
     try {
       const rawV2 = localStorage.getItem(STORAGE_KEY_V2)
       if (rawV2) {
-        const parsed = JSON.parse(rawV2) as StoreDataV3
+        const parsed = JSON.parse(rawV2) as any
+        const loadedGuides: GuideTemplate[] = Array.isArray(parsed.guides) && parsed.guides.length > 0
+          ? parsed.guides
+          : GUIDE_TEMPLATES
+        setGuides(loadedGuides)
+
+        const loadedGuideId = parsed.activeGuideId || DEFAULT_GUIDE_TEMPLATE.id
+        setActiveGuideId(loadedGuideId)
+
         if (parsed.weeks && parsed.weeks.length > 0) {
-          const formattedWeeks = parsed.weeks.map((w) => {
+          const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => {
             const data = w.data ?? { text: {}, done: {} }
             const rawActs =
               w.programacao?.activities && w.programacao.activities.length > 0
                 ? w.programacao.activities
                 : getDefaultScheduleActivities()
 
-            const acts = rawActs.map((a) => ({
+            const acts = rawActs.map((a: any) => ({
               ...a,
               countsTowardCompletion: a.countsTowardCompletion !== false,
             }))
 
+            const guideId = w.guideId || w.templateId || DEFAULT_GUIDE_TEMPLATE.id
+            const guideTpl = loadedGuides.find((g) => g.id === guideId) || DEFAULT_GUIDE_TEMPLATE
+            const guideVersion = w.guideVersion || guideTpl.version || 1
+            const guideSnapshot = w.guideSnapshot || {
+              id: guideTpl.id,
+              title: guideTpl.title,
+              version: guideVersion,
+              completionConfig: guideTpl.completionConfig,
+            }
+
             return {
               ...w,
-              guideId: w.guideId || w.templateId || DEFAULT_GUIDE_TEMPLATE.id,
-              templateId: w.templateId || w.guideId || DEFAULT_GUIDE_TEMPLATE.id,
+              guideId,
+              templateId: guideId,
+              guideVersion,
+              guideSnapshot,
               updatedAt: w.updatedAt || w.createdAt || new Date().toISOString(),
               status: w.status || "active",
               completedAt: w.completedAt || null,
@@ -414,6 +453,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         id: "week-1",
         guideId: DEFAULT_GUIDE_TEMPLATE.id,
         templateId: DEFAULT_GUIDE_TEMPLATE.id,
+        guideVersion: DEFAULT_GUIDE_TEMPLATE.version,
+        guideSnapshot: {
+          id: DEFAULT_GUIDE_TEMPLATE.id,
+          title: DEFAULT_GUIDE_TEMPLATE.title,
+          version: DEFAULT_GUIDE_TEMPLATE.version,
+          completionConfig: DEFAULT_GUIDE_TEMPLATE.completionConfig,
+        },
         title: "Semana 1",
         startDate: today,
         endDate: calculateInclusiveEndDate(today),
@@ -433,12 +479,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         progresso: computeProgress(legacyData, defaultActs),
       }
 
+      setGuides(GUIDE_TEMPLATES)
+      setActiveGuideId(DEFAULT_GUIDE_TEMPLATE.id)
       setWeeks([initialWeek])
       setActiveWeekId("week-1")
       localStorage.setItem(
         STORAGE_KEY_V2,
         JSON.stringify({
-          schemaVersion: 3,
+          schemaVersion: 4,
+          guides: GUIDE_TEMPLATES,
+          activeGuideId: DEFAULT_GUIDE_TEMPLATE.id,
           weeks: [initialWeek],
           activeWeekId: "week-1",
         })
@@ -455,6 +505,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
     )
   }, [weeks])
+
+  const activeGuide = useMemo(() => {
+    return guides.find((g) => g.id === activeGuideId) || guides[0] || DEFAULT_GUIDE_TEMPLATE
+  }, [guides, activeGuideId])
+
+  const selectGuide = useCallback((guideId: string) => {
+    setActiveGuideId(guideId)
+    persist(weeks, activeWeekId, guides, guideId)
+  }, [weeks, activeWeekId, guides, persist])
 
   const activeWeek = useMemo(() => {
     if (!activeWeekId) return sortedWeeks[0] ?? null
@@ -498,10 +557,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const initialData = { text: {}, done: {} }
         const defaultActs = getDefaultScheduleActivities()
 
+        const targetGuide = guides.find((g) => g.id === templateId) || activeGuide || DEFAULT_GUIDE_TEMPLATE
         const newWeek: WeekInstance = {
           id: newId,
-          guideId: templateId,
-          templateId,
+          guideId: targetGuide.id,
+          templateId: targetGuide.id,
+          guideVersion: targetGuide.version || 1,
+          guideSnapshot: {
+            id: targetGuide.id,
+            title: targetGuide.title,
+            version: targetGuide.version || 1,
+            completionConfig: targetGuide.completionConfig,
+          },
           title,
           startDate,
           endDate,
@@ -516,9 +583,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           data: initialData,
           programacao: {
             dias: 7,
-            activities: defaultActs,
+            activities: targetGuide.weeklyPlan || defaultActs,
           },
-          progresso: computeProgress(initialData, defaultActs),
+          progresso: computeProgress(initialData, targetGuide.weeklyPlan || defaultActs),
         }
 
         const updatedWeeks = [...prevWeeks, newWeek].sort((a, b) =>
@@ -530,7 +597,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return updatedWeeks
       })
     },
-    [computeProgress, persist]
+    [guides, activeGuide, computeProgress, persist]
   )
 
   const deleteWeek = useCallback(
@@ -546,6 +613,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             id: `week-${Date.now()}`,
             guideId: DEFAULT_GUIDE_TEMPLATE.id,
             templateId: DEFAULT_GUIDE_TEMPLATE.id,
+            guideVersion: DEFAULT_GUIDE_TEMPLATE.version,
+            guideSnapshot: {
+              id: DEFAULT_GUIDE_TEMPLATE.id,
+              title: DEFAULT_GUIDE_TEMPLATE.title,
+              version: DEFAULT_GUIDE_TEMPLATE.version,
+              completionConfig: DEFAULT_GUIDE_TEMPLATE.completionConfig,
+            },
             title: "Semana 1",
             startDate: today,
             endDate: calculateInclusiveEndDate(today),
@@ -621,6 +695,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setIsGeneratingAI(true)
       setAiError(null)
 
+      const guideSnapshotConfig = targetWeek.guideSnapshot?.completionConfig || activeGuide.completionConfig
+
       try {
         const res = await fetch("/api/analyze-week", {
           method: "POST",
@@ -628,12 +704,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            guideTitle: targetWeek.guideSnapshot?.title || activeGuide.title,
             weekTitle: targetWeek.title,
             startDate: targetWeek.startDate,
             endDate: targetWeek.endDate,
             snapshot: targetWeek.completionSnapshot,
             textAnswers: targetWeek.data.text,
-            theologyEnabled: true, // Default guide template uses theology
+            theologyEnabled: activeGuide.theologyEnabled,
+            completionConfig: guideSnapshotConfig,
           }),
         })
 
@@ -1012,8 +1090,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const exportToMarkdown = useCallback(() => {
     if (!activeWeek) return
+    const guideTitle = activeWeek.guideSnapshot?.title || activeGuide.title
     const rangeStr = formatDateRangeBR(activeWeek.startDate, activeWeek.endDate)
-    let md = `# ${DEFAULT_GUIDE_TEMPLATE.title}\n`
+    let md = `# ${guideTitle}\n`
     md += `## ${activeWeek.title} (${rangeStr})\n\n`
     md += `**Status:** ${activeWeek.status === "completed" ? "Concluída" : "Em andamento"}\n`
     if (activeWeek.completedAt) {
@@ -1089,10 +1168,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `Guia_Retomada_${activeWeek.title.replace(/\s+/g, "_")}.md`
+    a.download = `${guideTitle.replace(/\s+/g, "_")}_${activeWeek.title.replace(/\s+/g, "_")}.md`
     a.click()
     URL.revokeObjectURL(url)
-  }, [activeWeek])
+  }, [activeWeek, activeGuide])
 
   const exportWeekJSON = useCallback(() => {
     if (!activeWeek) return
@@ -1107,11 +1186,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }))
     const exportData = {
       exportVersion: 1,
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       guide: {
-        id: activeWeek.guideId || DEFAULT_GUIDE_TEMPLATE.id,
-        title: DEFAULT_GUIDE_TEMPLATE.title,
+        id: activeWeek.guideId || activeGuide.id,
+        title: activeWeek.guideSnapshot?.title || activeGuide.title,
+        version: activeWeek.guideVersion || activeGuide.version,
       },
       metadata: {
         weekId: activeWeek.id,
@@ -1145,14 +1225,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     a.download = `Semana_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }, [activeWeek])
+  }, [activeWeek, activeGuide])
 
   const exportToJSON = useCallback(() => {
     const exportData = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       exportedAt: new Date().toISOString(),
       theme,
       palette,
+      activeGuideId,
+      guides,
       activeWeekId,
       weeks,
     }
@@ -1164,7 +1246,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     a.download = `Guia_Retomada_Backup_${new Date().toISOString().split("T")[0]}.json`
     a.click()
     URL.revokeObjectURL(url)
-  }, [weeks, activeWeekId, theme, palette])
+  }, [weeks, activeWeekId, theme, palette, activeGuideId, guides])
 
   const importFromJSON = useCallback(
     (jsonData: string) => {
@@ -1173,22 +1255,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!parsed || !Array.isArray(parsed.weeks) || parsed.weeks.length === 0) {
           return false
         }
-        const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => ({
-          ...w,
-          status: w.status || "active",
-          completedAt: w.completedAt || null,
-          completionSnapshot: w.completionSnapshot || null,
-          aiReview: w.aiReview || null,
-          aiReviewVersion: w.aiReviewVersion || 1,
-          aiReviewOutdated: Boolean(w.aiReviewOutdated),
-          programacao: {
-            dias: 7,
-            activities: (w.programacao?.activities || getDefaultScheduleActivities()).map((a: any) => ({
-              ...a,
-              countsTowardCompletion: a.countsTowardCompletion !== false,
-            })),
-          },
-        }))
+
+        const loadedGuides: GuideTemplate[] = Array.isArray(parsed.guides) && parsed.guides.length > 0
+          ? parsed.guides
+          : GUIDE_TEMPLATES
+        setGuides(loadedGuides)
+
+        const loadedGuideId = parsed.activeGuideId || DEFAULT_GUIDE_TEMPLATE.id
+        setActiveGuideId(loadedGuideId)
+
+        const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => {
+          const guideId = w.guideId || w.templateId || DEFAULT_GUIDE_TEMPLATE.id
+          const guideTpl = loadedGuides.find((g) => g.id === guideId) || DEFAULT_GUIDE_TEMPLATE
+          const guideVersion = w.guideVersion || guideTpl.version || 1
+          const guideSnapshot = w.guideSnapshot || {
+            id: guideTpl.id,
+            title: guideTpl.title,
+            version: guideVersion,
+            completionConfig: guideTpl.completionConfig,
+          }
+
+          return {
+            ...w,
+            guideId,
+            templateId: guideId,
+            guideVersion,
+            guideSnapshot,
+            status: w.status || "active",
+            completedAt: w.completedAt || null,
+            completionSnapshot: w.completionSnapshot || null,
+            aiReview: w.aiReview || null,
+            aiReviewVersion: w.aiReviewVersion || 1,
+            aiReviewOutdated: Boolean(w.aiReviewOutdated),
+            programacao: {
+              dias: 7,
+              activities: (w.programacao?.activities || getDefaultScheduleActivities()).map((a: any) => ({
+                ...a,
+                countsTowardCompletion: a.countsTowardCompletion !== false,
+              })),
+            },
+          }
+        })
+
         setWeeks(formattedWeeks)
         if (parsed.activeWeekId && formattedWeeks.some((w) => w.id === parsed.activeWeekId)) {
           setActiveWeekId(parsed.activeWeekId)
@@ -1201,7 +1309,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.palette && ["sage", "terracotta", "blue", "graphite", "olive"].includes(parsed.palette)) {
           setPalette(parsed.palette)
         }
-        persist(formattedWeeks, parsed.activeWeekId || formattedWeeks[0].id)
+        persist(formattedWeeks, parsed.activeWeekId || formattedWeeks[0].id, loadedGuides, loadedGuideId)
         return true
       } catch {
         return false
@@ -1213,6 +1321,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<StoreValue>(
     () => ({
       ready,
+      guides,
+      activeGuide,
+      activeGuideId,
+      selectGuide,
       weeks: sortedWeeks,
       activeWeek,
       activeWeekId: activeWeek?.id ?? null,
@@ -1250,6 +1362,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       ready,
+      guides,
+      activeGuide,
+      activeGuideId,
+      selectGuide,
       sortedWeeks,
       activeWeek,
       selectWeek,

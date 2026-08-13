@@ -27,11 +27,13 @@ import { CreateWeekModal, DeleteWeekModal } from "@/components/week-modal"
 import { SettingsModal } from "@/components/settings-modal"
 import { CompleteWeekModal } from "@/components/complete-week-modal"
 import { WeekReviewCard } from "@/components/week-review-card"
+import { MyGuidesModal } from "@/components/my-guides-modal"
 
 export function GuideApp() {
   const {
     weeks,
     activeWeek,
+    activeGuide,
     selectWeek,
     hasPrevWeek,
     hasNextWeek,
@@ -46,6 +48,7 @@ export function GuideApp() {
   const [weeksDrawerOpen, setWeeksDrawerOpen] = useState(false)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [completeModalOpen, setCompleteModalOpen] = useState(false)
+  const [myGuidesModalOpen, setMyGuidesModalOpen] = useState(false)
   const [weekToDelete, setWeekToDelete] = useState<WeekInstance | null>(null)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">("semanas")
@@ -100,7 +103,7 @@ export function GuideApp() {
             >
               <BookOpen className="size-4 hidden sm:block text-primary shrink-0" aria-hidden="true" />
               <span className="truncate max-w-[7rem] xs:max-w-none sm:max-w-[14rem]">
-                {DEFAULT_GUIDE_TEMPLATE.title}
+                {activeGuide ? activeGuide.title : DEFAULT_GUIDE_TEMPLATE.title}
               </span>
             </a>
           </div>
@@ -195,6 +198,18 @@ export function GuideApp() {
               <span className="hidden md:inline text-xs font-semibold capitalize">
                 {theme === "light" ? "Claro" : theme === "dark" ? "Escuro" : "Sistema"}
               </span>
+            </button>
+
+            {/* Meus Guias */}
+            <button
+              type="button"
+              onClick={() => setMyGuidesModalOpen(true)}
+              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
+              title="Gerenciar Meus Guias"
+              aria-label="Meus Guias"
+            >
+              <BookOpen className="size-3.5 text-primary shrink-0" aria-hidden="true" />
+              <span className="hidden md:inline text-xs font-semibold">Meus Guias</span>
             </button>
 
             {/* Settings */}
@@ -459,17 +474,28 @@ export function GuideApp() {
                 </button>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setWeeksDrawerOpen(false)
                     setCreateModalOpen(true)
                   }}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-3 px-3 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
+                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 px-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                 >
                   <Plus className="size-4" aria-hidden="true" />
-                  <span>Criar Nova Semana</span>
+                  <span>Nova Semana</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeeksDrawerOpen(false)
+                    setMyGuidesModalOpen(true)
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-border bg-card py-2.5 px-3 text-xs sm:text-sm font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
+                >
+                  <BookOpen className="size-4 text-primary" aria-hidden="true" />
+                  <span>Meus Guias</span>
                 </button>
               </div>
 
@@ -624,6 +650,11 @@ export function GuideApp() {
         isOpen={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
         initialTab={settingsTab}
+      />
+      {/* My Guides Modal */}
+      <MyGuidesModal
+        isOpen={myGuidesModalOpen}
+        onClose={() => setMyGuidesModalOpen(false)}
       />
     </div>
   )

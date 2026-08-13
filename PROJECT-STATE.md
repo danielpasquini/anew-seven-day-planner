@@ -1,6 +1,6 @@
 # PROJECT-STATE.md — Guia de Retomada (Ciclos Semanais)
 
-> Última atualização: 2026-08-13 (Auditoria E2E Concluída)
+> Última atualização: 2026-08-13 (Abstração GuideTemplate & Meus Guias Concluída)
 > Baseline commit: `f5c3f16` (tag: v0-import)
 
 ---
@@ -16,7 +16,7 @@
 | Componentes UI | shadcn/Base UI (`base-nova` style) | 4.8.0 |
 | Ícones | lucide-react | 1.16.0 |
 | Fontes | Geist Sans + Lora (next/font/google) | — |
-| Persistência | localStorage (chave `guia-retomada-v2`, schema v3) | — |
+| Persistência | localStorage (chave `guia-retomada-v2`, schema v4) | — |
 | Build | Turbopack (dev) / Next.js (prod) | — |
 
 **Não há**: Firebase, Firestore, autenticação, cloud sync, banco de dados.
@@ -33,10 +33,11 @@ app/
   globals.css       — Tokens CSS (oklch), paletas light/dark, @print, safe-area
   api/
     analyze-week/
-      route.ts      — POST API Handler Server-Side para Gemini (Structured Output JSON)
+      route.ts      — POST API Handler Server-Side para Gemini desacoplado (Structured Output JSON via completionConfig)
 
 components/
-  guide-app.tsx     — Componente principal com botões de completar semana, header, drawers
+  guide-app.tsx     — Componente principal com botões de completar semana, header, drawers e Meus Guias
+  my-guides-modal.tsx — Modal "Meus Guias" para selecionar guia ativo, ver semanas e criar novas semanas vinculadas
   complete-week-modal.tsx — Modal de confirmação com resumo e snapshot antes de concluir
   week-review-card.tsx    — Exibição da semana concluída, Veredito da Semana, AI Review e Reabrir
   section-card.tsx  — Card wrapper para cada Section
@@ -52,21 +53,59 @@ docs/
   contrast-check.mjs      — Utilitário de verificação automatizada de contraste WCAG
 
 lib/
-  guide-data.ts     — Tipos, conteúdo estático (intro + 17 sections), DEFAULT_GUIDE_TEMPLATE
-  store.tsx         — StoreProvider (Context + useState), WeekInstance, status,
+  guide-data.ts     — Tipos, GuideTemplate, CompletionConfig, conteúdo estático (intro + 17 sections), DEFAULT_GUIDE_TEMPLATE
+  store.tsx         — StoreProvider (Context + useState), GuideTemplateSnapshot, WeekInstance, status,
                       completionSnapshot, aiReview, completeWeek, reopenWeek, generateAIReview,
-                      persistência v3, tema/paleta, export MD/JSON, import JSON
+                      persistência v4, tema/paleta, export MD/JSON, import JSON
   date-utils.ts     — Funções de data: calculateInclusiveEndDate, getNextDayDate, formatDateRangeBR
   utils.ts          — cn() (clsx + tailwind-merge)
 ```
 
 ---
 
-## 3. Schema atual (localStorage `guia-retomada-v2`, `schemaVersion: 3`)
+## 3. Schema atual (localStorage `guia-retomada-v2`, `schemaVersion: 4`)
 
 ```typescript
-type StoreDataV3 = {
-  schemaVersion: 3
+type CompletionConfig = {
+  enabled: boolean
+  reviewTitle: string
+  analysisDimensions: string[]
+  nextWeekFocusRules: string[]
+  theologyReviewEnabled: boolean
+}
+
+type GuideTemplate = {
+  id: string
+  title: string
+  description: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  schemaVersion: number
+  config: {
+    targetAudience?: string
+    category?: string
+  }
+  intro: typeof intro
+  sections: Section[]
+  scheduleTaskIds: string[]
+  weeklyPlan: ScheduleActivityItem[]
+  quickSheets?: { id: string; title: string; summary: string }[]
+  theologyEnabled: boolean
+  completionConfig: CompletionConfig
+}
+
+type GuideTemplateSnapshot = {
+  id: string
+  title: string
+  version: number
+  completionConfig: CompletionConfig
+}
+
+type StoreDataV4 = {
+  schemaVersion: 4
+  guides: GuideTemplate[]
+  activeGuideId: string
   weeks: WeekInstance[]
   activeWeekId: string
 }
@@ -114,6 +153,8 @@ type WeekInstance = {
   id: string
   guideId: string
   templateId: string
+  guideVersion?: number
+  guideSnapshot?: GuideTemplateSnapshot | null
   title: string
   startDate: string
   endDate: string
@@ -149,6 +190,11 @@ type WeekInstance = {
 
 | Funcionalidade | Onde |
 |----------------|------|
+| Separação GuideTemplate × WeekInstance | `guide-data.ts`, `store.tsx` |
+| Versionamento & Snapshot do Template nas Semanas (`guideSnapshot`) | `store.tsx` |
+| Área UI "Meus Guias" (selecionar guia, ver semanas, criar semana) | `components/my-guides-modal.tsx`, `guide-app.tsx` |
+| Motor de Conclusão AI Desacoplado via `completionConfig` | `app/api/analyze-week/route.ts` |
+| Preservação / Migração segura para schema v4 | `store.tsx` (sem perda de dados de v3/v2/v1) |
 | Completar Semana (Encerramento Formal) | `store.tsx`, `complete-week-modal.tsx`, `guide-app.tsx` |
 | Snapshot de Conclusão (`completionSnapshot`) | `store.tsx` → `createSnapshot` |
 | Análise Inteligente Server-Side Gemini AI | `app/api/analyze-week/route.ts` (Structured Output JSON) |
@@ -156,29 +202,25 @@ type WeekInstance = {
 | Reabrir Semana Concluída | `store.tsx` → `reopenWeek` |
 | Detecção de Análise Desatualizada após edição | `store.tsx` (`aiReviewOutdated: true`) |
 | Toggle `countsTowardCompletion` por Atividade | `schedule-block.tsx` |
-| Badge Discreto de Status (`Concluída · X%`) | `guide-app.tsx`, `settings-modal.tsx` |
-| Preservação / Migração segura para schema v3 | `store.tsx` (sem perda de dados de v2/v1) |
+| Badge Discreto de Status (`Concluída · X%`) | `guide-app.tsx`, `settings-modal.tsx`, `my-guides-modal.tsx` |
 | 17 seções do guia com Escritura | `guide-data.ts`, `section-card.tsx` |
 | Múltiplas semanas independentes (CRUD) | `store.tsx`, `week-modal.tsx`, `settings-modal.tsx` |
 | 5 paletas de cores com WCAG ≥ 4.5:1 | `globals.css`, `docs/contrast-check.mjs` |
 | Guardrails visuais permanentes | `docs/UI-DESIGN-GUARDRAILS.md` |
-| Exportação Markdown / JSON semana / PDF | `store.tsx` → `exportToMarkdown`, `exportWeekJSON`; `settings-modal.tsx` |
-| Exportação Backup Completo JSON (todas as semanas) | `store.tsx` → `exportToJSON` |
+| Exportação Markdown / JSON semana / PDF com GuideTemplate | `store.tsx` → `exportToMarkdown`, `exportWeekJSON`; `settings-modal.tsx` |
+| Exportação Backup Completo JSON (schema v4 com guides) | `store.tsx` → `exportToJSON` |
 | Importação com preview de confirmação antes de sobrescrever | `settings-modal.tsx` → `pendingImport` state + `handleConfirmImport` |
 
 ---
 
 ## 5. Arquivos Modificados / Criados nesta Etapa
 
-- `app/api/analyze-week/route.ts` *(novo)*
-- `components/complete-week-modal.tsx` *(novo)*
-- `components/week-review-card.tsx` *(novo)*
-- `lib/store.tsx` *(atualizado: schema v3, status, snapshot, aiReview, exportWeekJSON)*
-- `components/schedule-block.tsx` *(atualizado: toggle countsTowardCompletion)*
-- `components/guide-app.tsx` *(atualizado: botões de completar, integração dos modais/cards)*
-- `components/settings-modal.tsx` *(atualizado: tab Exportação dividida em duas seções; import com confirmação)*
-- `app/globals.css` *(atualizado: print CSS aprimorado — A4, @page, oculta dialogs/drawers)*
-- `.env.example` *(documentação da chave GEMINI_API_KEY)*
+- `lib/guide-data.ts` *(expandido: GuideTemplate, CompletionConfig, DEFAULT_GUIDE_TEMPLATE v1)*
+- `components/my-guides-modal.tsx` *(novo: modal "Meus Guias")*
+- `app/api/analyze-week/route.ts` *(atualizado: motor de conclusão dinâmico via completionConfig)*
+- `lib/store.tsx` *(atualizado: schema v4, GuideTemplateSnapshot, activeGuide, selectGuide, export/import v4)*
+- `components/guide-app.tsx` *(atualizado: integração "Meus Guias" no header e mobile drawer)*
+- `PROJECT-STATE.md` *(atualizado: documentação do estado e schema v4)*
 
 ---
 
@@ -186,16 +228,10 @@ type WeekInstance = {
 
 - **TypeScript**: `node_modules\.bin\tsc --noEmit` — **0 erros**.
 - **Production Build**: `next build` — compilação bem-sucedida incluindo a rota dinâmica `ƒ /api/analyze-week`.
-- **API Gemini**: Processada exclusivamente no servidor via `process.env.GEMINI_API_KEY`.
+- **API Gemini**: Processada exclusivamente no servidor via `process.env.GEMINI_API_KEY`, usando dinamicamente `completionConfig`.
 - **Resiliência a Falhas**: Se a chave Gemini não estiver definida no ambiente ou a API falhar, a semana permanece concluída com snapshot salvo e o cartão exibe aviso com opção de tentar novamente.
 - **Visual & UX**: Botões e badges discretos sem estados de erro para porcentagens baixas.
-- **Export Semana Atual**: PDF (window.print A4), Markdown, JSON semana (exportVersion, guide, metadata, schedule, responses, tasks, progress, completionSnapshot, aiReview).
-- **Backup Completo**: JSON com todas as semanas + tema/paleta; sem API keys ou credenciais.
+- **Export Semana Atual**: PDF (window.print A4), Markdown, JSON semana (exportVersion, guide com version, metadata, schedule, responses, tasks, progress, completionSnapshot, aiReview).
+- **Backup Completo**: JSON schema v4 com todas as semanas + guides + preferências tema/paleta; sem API keys ou credenciais.
 - **Import com confirmação**: Parsing e validação antes de sobrescrever; preview de semanas + data de exportação; cancelável.
-- **Auditoria E2E**:
-  - **Semanas**: 7 dias fixos por semana, criação, exclusão, troca, isolamento de dados e navegação anterior/próxima validados.
-  - **Programação**: Adição, edição, exclusão, reordenação (up/down), checkboxes e computação de porcentagem validados.
-  - **Configurações**: Todas as 4 abas (Semanas, Programação, Aparência, Exportação) e dialogs funcionais e responsivos.
-  - **Aparência**: As 5 paletas (Sage, Terracotta, Blue, Graphite, Olive) × 3 temas (Light, Dark, System) validados com contraste WCAG ≥ 4.5:1.
-  - **Conclusão de Semana**: Snapshots de progresso, revisão estruturada via Gemini AI REST, reabertura e reconclusão testados.
-  - **Responsividade**: Testado e verificado nos viewports `320px`, `375px`, `402px`, `430px` (iPhone 17 portrait), `768px`, `1024px` e `1440px` sem overflow horizontal e com touch targets adequados (≥ 44px).
+- **Meus Guias**: Suporte a múltiplos modelos de guia, seleção de guia ativo, listagem de semanas por guia, criação de semanas vinculadas ao modelo, e snapshot versionado do template em cada semana.
