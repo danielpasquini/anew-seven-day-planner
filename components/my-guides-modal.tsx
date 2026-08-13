@@ -6,6 +6,7 @@ import { useStore, type WeekInstance } from "@/lib/store"
 import { type GuideTemplate } from "@/lib/guide-data"
 import { formatDateRangeBR, getTodayFormatted } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
+import { CreateGuideModal } from "@/components/create-guide-modal"
 
 interface MyGuidesModalProps {
   isOpen: boolean
@@ -26,6 +27,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
   const [selectedGuideId, setSelectedGuideId] = useState<string>(activeGuideId)
   const [newWeekTitle, setNewWeekTitle] = useState("")
   const [newWeekStartDate, setNewWeekStartDate] = useState(getTodayFormatted())
+  const [createGuideOpen, setCreateGuideOpen] = useState(false)
 
   if (!isOpen) return null
 
@@ -87,12 +89,12 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
               </h3>
               <button
                 type="button"
-                disabled
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-1.5 text-xs font-semibold text-muted-foreground cursor-not-allowed opacity-75"
-                title="Geração de novos guias via Gemini em breve"
+                onClick={() => setCreateGuideOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation shadow-xs"
+                title="Criar novo guia personalizado"
               >
                 <Plus className="size-3.5" aria-hidden="true" />
-                <span>Criar Novo Guia (Em breve)</span>
+                <span>+ Criar Novo Guia</span>
               </button>
             </div>
 
@@ -324,6 +326,12 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
           </button>
         </div>
       </div>
+
+      {/* Create Guide Modal */}
+      <CreateGuideModal
+        isOpen={createGuideOpen}
+        onClose={() => setCreateGuideOpen(false)}
+      />
     </div>
   )
 }

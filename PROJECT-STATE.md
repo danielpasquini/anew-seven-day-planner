@@ -193,6 +193,8 @@ type WeekInstance = {
 | Separação GuideTemplate × WeekInstance | `guide-data.ts`, `store.tsx` |
 | Versionamento & Snapshot do Template nas Semanas (`guideSnapshot`) | `store.tsx` |
 | Área UI "Meus Guias" (selecionar guia, ver semanas, criar semana) | `components/my-guides-modal.tsx`, `guide-app.tsx` |
+| Formulário "+ Criar Novo Guia" com Validação, Rascunho e Revisão | `components/create-guide-modal.tsx`, `my-guides-modal.tsx` |
+| Cálculo de Teologia no Código (`theologyEnabled` baseado no preenchimento) | `create-guide-modal.tsx` |
 | Motor de Conclusão AI Desacoplado via `completionConfig` | `app/api/analyze-week/route.ts` |
 | Preservação / Migração segura para schema v4 | `store.tsx` (sem perda de dados de v3/v2/v1) |
 | Completar Semana (Encerramento Formal) | `store.tsx`, `complete-week-modal.tsx`, `guide-app.tsx` |
@@ -215,8 +217,9 @@ type WeekInstance = {
 
 ## 5. Arquivos Modificados / Criados nesta Etapa
 
+- `components/create-guide-modal.tsx` *(novo: modal de formulário em 2 etapas com validação, rascunho local e revisão de novo guia)*
+- `components/my-guides-modal.tsx` *(atualizado: integração do botão "+ Criar Novo Guia" com o CreateGuideModal)*
 - `lib/guide-data.ts` *(expandido: GuideTemplate, CompletionConfig, DEFAULT_GUIDE_TEMPLATE v1)*
-- `components/my-guides-modal.tsx` *(novo: modal "Meus Guias")*
 - `app/api/analyze-week/route.ts` *(atualizado: motor de conclusão dinâmico via completionConfig)*
 - `lib/store.tsx` *(atualizado: schema v4, GuideTemplateSnapshot, activeGuide, selectGuide, export/import v4)*
 - `components/guide-app.tsx` *(atualizado: integração "Meus Guias" no header e mobile drawer)*
@@ -228,10 +231,11 @@ type WeekInstance = {
 
 - **TypeScript**: `node_modules\.bin\tsc --noEmit` — **0 erros**.
 - **Production Build**: `next build` — compilação bem-sucedida incluindo a rota dinâmica `ƒ /api/analyze-week`.
-- **API Gemini**: Processada exclusivamente no servidor via `process.env.GEMINI_API_KEY`, usando dinamicamente `completionConfig`.
-- **Resiliência a Falhas**: Se a chave Gemini não estiver definida no ambiente ou a API falhar, a semana permanece concluída com snapshot salvo e o cartão exibe aviso com opção de tentar novamente.
-- **Visual & UX**: Botões e badges discretos sem estados de erro para porcentagens baixas.
-- **Export Semana Atual**: PDF (window.print A4), Markdown, JSON semana (exportVersion, guide com version, metadata, schedule, responses, tasks, progress, completionSnapshot, aiReview).
-- **Backup Completo**: JSON schema v4 com todas as semanas + guides + preferências tema/paleta; sem API keys ou credenciais.
-- **Import com confirmação**: Parsing e validação antes de sobrescrever; preview de semanas + data de exportação; cancelável.
-- **Meus Guias**: Suporte a múltiplos modelos de guia, seleção de guia ativo, listagem de semanas por guia, criação de semanas vinculadas ao modelo, e snapshot versionado do template em cada semana.
+- **Formulário de Criação de Guia**:
+  - Campos: Nome do guia, foco, esquemas, traumas/experiências, dificuldades atuais, áreas prioritárias, linhas da psicologia, teologia/cosmovisão, rotina/horários, o que ajuda, limites/coisas a evitar, intensidade (muito leve / leve / moderada) e observações adicionais.
+  - Regra de Teologia: Calculada puramente no código TypeScript (`theologyEnabled = Boolean(theologyCosmovision && theologyCosmovision.trim().length > 0)`).
+  - Validação: Validação visual e bloqueio de avanço para campos obrigatórios vazios.
+  - Rascunho Local: Persistência automática em `localStorage` (`guia-novo-draft`) com opção de limpar rascunho.
+  - Fluxo: Formulário → Revisão detalhada de parâmetros → Pronto para futura geração por IA (sem chamada à IA nesta etapa).
+  - Responsividade: Otimizado para iPhone 17 (inputs 16px, touch targets >= 44px) e desktop.
+
