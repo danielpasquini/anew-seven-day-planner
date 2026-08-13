@@ -215,6 +215,7 @@ type StoreValue = {
   palette: ColorPalette
   setPalette: (palette: ColorPalette) => void
   exportToMarkdown: () => void
+  exportWeekJSON: () => void
   exportToJSON: () => void
   importFromJSON: (jsonData: string) => boolean
 }
@@ -1093,6 +1094,59 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     URL.revokeObjectURL(url)
   }, [activeWeek])
 
+  const exportWeekJSON = useCallback(() => {
+    if (!activeWeek) return
+    const activities = activeWeek.programacao?.activities || []
+    const taskResults = activities.map((a) => ({
+      id: a.id,
+      dayIndex: a.dayIndex,
+      time: a.time,
+      description: a.description,
+      countsTowardCompletion: a.countsTowardCompletion !== false,
+      done: Boolean(activeWeek.data.done[a.id]),
+    }))
+    const exportData = {
+      exportVersion: 1,
+      schemaVersion: 3,
+      exportedAt: new Date().toISOString(),
+      guide: {
+        id: activeWeek.guideId || DEFAULT_GUIDE_TEMPLATE.id,
+        title: DEFAULT_GUIDE_TEMPLATE.title,
+      },
+      metadata: {
+        weekId: activeWeek.id,
+        title: activeWeek.title,
+        startDate: activeWeek.startDate,
+        endDate: activeWeek.endDate,
+        status: activeWeek.status,
+        createdAt: activeWeek.createdAt,
+        updatedAt: activeWeek.updatedAt,
+        completedAt: activeWeek.completedAt ?? null,
+      },
+      schedule: activities.map((a) => ({
+        id: a.id,
+        dayIndex: a.dayIndex,
+        time: a.time,
+        description: a.description,
+        order: a.order,
+        countsTowardCompletion: a.countsTowardCompletion !== false,
+      })),
+      responses: activeWeek.data.text,
+      tasks: taskResults,
+      progress: activeWeek.progresso,
+      completionSnapshot: activeWeek.completionSnapshot ?? null,
+      aiReview: activeWeek.aiReview ?? null,
+    }
+    const jsonStr = JSON.stringify(exportData, null, 2)
+    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `Semana_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [activeWeek])
+
   const exportToJSON = useCallback(() => {
     const exportData = {
       schemaVersion: 3,
@@ -1190,6 +1244,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       palette,
       setPalette,
       exportToMarkdown,
+      exportWeekJSON,
       exportToJSON,
       importFromJSON,
     }),
@@ -1225,6 +1280,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       palette,
       setPalette,
       exportToMarkdown,
+      exportWeekJSON,
       exportToJSON,
       importFromJSON,
     ]

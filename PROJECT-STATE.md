@@ -1,6 +1,6 @@
 # PROJECT-STATE.md — Guia de Retomada (Ciclos Semanais)
 
-> Última atualização: 2026-08-12
+> Última atualização: 2026-08-13
 > Baseline commit: `f5c3f16` (tag: v0-import)
 
 ---
@@ -162,7 +162,9 @@ type WeekInstance = {
 | Múltiplas semanas independentes (CRUD) | `store.tsx`, `week-modal.tsx`, `settings-modal.tsx` |
 | 5 paletas de cores com WCAG ≥ 4.5:1 | `globals.css`, `docs/contrast-check.mjs` |
 | Guardrails visuais permanentes | `docs/UI-DESIGN-GUARDRAILS.md` |
-| Exportação Markdown / JSON / PDF | `store.tsx`, `settings-modal.tsx` |
+| Exportação Markdown / JSON semana / PDF | `store.tsx` → `exportToMarkdown`, `exportWeekJSON`; `settings-modal.tsx` |
+| Exportação Backup Completo JSON (todas as semanas) | `store.tsx` → `exportToJSON` |
+| Importação com preview de confirmação antes de sobrescrever | `settings-modal.tsx` → `pendingImport` state + `handleConfirmImport` |
 
 ---
 
@@ -171,9 +173,11 @@ type WeekInstance = {
 - `app/api/analyze-week/route.ts` *(novo)*
 - `components/complete-week-modal.tsx` *(novo)*
 - `components/week-review-card.tsx` *(novo)*
-- `lib/store.tsx` *(atualizado: schema v3, status, snapshot, aiReview)*
+- `lib/store.tsx` *(atualizado: schema v3, status, snapshot, aiReview, exportWeekJSON)*
 - `components/schedule-block.tsx` *(atualizado: toggle countsTowardCompletion)*
 - `components/guide-app.tsx` *(atualizado: botões de completar, integração dos modais/cards)*
+- `components/settings-modal.tsx` *(atualizado: tab Exportação dividida em duas seções; import com confirmação)*
+- `app/globals.css` *(atualizado: print CSS aprimorado — A4, @page, oculta dialogs/drawers)*
 - `.env.example` *(documentação da chave GEMINI_API_KEY)*
 
 ---
@@ -185,3 +189,6 @@ type WeekInstance = {
 - **API Gemini**: Processada exclusivamente no servidor via `process.env.GEMINI_API_KEY`.
 - **Resiliência a Falhas**: Se a chave Gemini não estiver definida no ambiente ou a API falhar, a semana permanece concluída com snapshot salvo e o cartão exibe aviso com opção de tentar novamente.
 - **Visual & UX**: Botões e badges discretos sem estados de erro para porcentagens baixas.
+- **Export Semana Atual**: PDF (window.print A4), Markdown, JSON semana (exportVersion, guide, metadata, schedule, responses, tasks, progress, completionSnapshot, aiReview).
+- **Backup Completo**: JSON com todas as semanas + tema/paleta; sem API keys ou credenciais.
+- **Import com confirmação**: Parsing e validação antes de sobrescrever; preview de semanas + data de exportação; cancelável.

@@ -339,26 +339,71 @@
 
 /* ─── Print ───────────────────────────────────────────────────────────────── */
 @media print {
+  /* Hide all chrome: header, sidebar, drawers, floating buttons */
   header,
   aside,
   button,
+  dialog,
+  [role="dialog"],
+  [aria-modal="true"],
   .no-print {
     display: none !important;
   }
 
-  body {
+  /* Force white background, black text */
+  body,
+  html {
     background: #ffffff !important;
     color: #000000 !important;
   }
 
+  /* Remove backdrop blur / glassmorphism effects */
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Ensure full-width content on A4 */
+  main,
+  .mx-auto {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Clean up borders for print */
   .border {
     border-color: #cccccc !important;
   }
 
-  textarea, input {
+  /* Inputs show as plain text */
+  textarea,
+  input {
     border: none !important;
     background: transparent !important;
     resize: none !important;
+    color: #000000 !important;
+  }
+
+  /* Avoid page breaks inside section cards */
+  section,
+  article,
+  .section-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Week review card: keep together */
+  .week-review-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 20mm;
   }
 }
 

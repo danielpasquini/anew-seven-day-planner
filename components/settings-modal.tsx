@@ -16,6 +16,7 @@ import {
   Monitor,
   Printer,
   FileText,
+  FileJson,
   Database,
   Upload,
   ArrowUp,
@@ -53,6 +54,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     palette,
     setPalette,
     exportToMarkdown,
+    exportWeekJSON,
     exportToJSON,
     importFromJSON,
     addScheduleActivity,
@@ -85,6 +87,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   // Section 4: Import state
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; msg: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Pending import confirmation
+  const [pendingImport, setPendingImport] = useState<{
+    raw: string
+    weekCount: number
+    weekTitles: string[]
+    exportedAt: string | null
+  } | null>(null)
 
   if (!isOpen) return null
 
@@ -130,7 +139,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     setEditingActId(null)
   }
 
-  // Import JSON handler
+  // Import JSON handler — parse and show confirmation first
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -138,17 +147,37 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     const reader = new FileReader()
     reader.onload = (event) => {
       const content = event.target?.result as string
-      if (content) {
-        const ok = importFromJSON(content)
-        if (ok) {
-          setImportStatus({ type: "success", msg: "Backup restaurado com sucesso!" })
-        } else {
-          setImportStatus({ type: "error", msg: "Arquivo de backup inválido ou corrompido." })
+      if (!content) return
+      try {
+        const parsed = JSON.parse(content)
+        if (!parsed || !Array.isArray(parsed.weeks) || parsed.weeks.length === 0) {
+          setImportStatus({ type: "error", msg: "Arquivo inválido: não contém semanas reconhecíveis." })
+          return
         }
+        // Stage for confirmation
+        setPendingImport({
+          raw: content,
+          weekCount: parsed.weeks.length,
+          weekTitles: parsed.weeks.slice(0, 5).map((w: any) => w.title ?? "Semana sem título"),
+          exportedAt: parsed.exportedAt ?? null,
+        })
+      } catch {
+        setImportStatus({ type: "error", msg: "Arquivo corrompido ou não é um JSON válido." })
       }
     }
     reader.readAsText(file)
     e.target.value = ""
+  }
+
+  const handleConfirmImport = () => {
+    if (!pendingImport) return
+    const ok = importFromJSON(pendingImport.raw)
+    setPendingImport(null)
+    if (ok) {
+      setImportStatus({ type: "success", msg: "Backup restaurado com sucesso!" })
+    } else {
+      setImportStatus({ type: "error", msg: "Falha ao restaurar backup. Arquivo inválido ou corrompido." })
+    }
   }
 
   const days = activeWeek ? getWeekDays(activeWeek.startDate) : []
@@ -795,16 +824,58 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
             {/* TAB 4: EXPORTAÇÃO */}
             {activeTab === "exportacao" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-serif text-base font-semibold text-foreground">
-                    Exportação e Backup
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Guarde relatórios impressos do seu progresso, exporte arquivos em Markdown ou faça backup dos seus dados em JSON.
-                  </p>
-                </div>
+              <div className="space-y-8">
 
+                {/* Import Confirmation Dialog */}
+                {pendingImport && (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400 text-lg leading-none">⚠️</span>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Confirmar restauração de backup?</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Isso <strong>substituirá todos os dados atuais</strong> pelo conteúdo do arquivo.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-background/70 border border-border p-3 text-xs space-y-1">
+                      <p className="font-semibold text-foreground">
+                        {pendingImport.weekCount} {pendingImport.weekCount === 1 ? "semana" : "semanas"} no arquivo:
+                      </p>
+                      <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
+                        {pendingImport.weekTitles.map((t, i) => (
+                          <li key={i}>{t}</li>
+                        ))}
+                        {pendingImport.weekCount > 5 && (
+                          <li className="text-muted-foreground/60">...e mais {pendingImport.weekCount - 5}</li>
+                        )}
+                      </ul>
+                      {pendingImport.exportedAt && (
+                        <p className="text-muted-foreground pt-1">
+                          Exportado em: {new Date(pendingImport.exportedAt).toLocaleString("pt-BR")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleConfirmImport}
+                        className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 transition touch-manipulation"
+                      >
+                        Restaurar agora
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingImport(null)}
+                        className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Import / Export status message */}
                 {importStatus && (
                   <div
                     className={cn(
@@ -826,69 +897,110 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-4">
-                  {/* Option 1: PDF Print */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <Printer className="size-5" aria-hidden="true" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-foreground">
-                          Imprimir ou Salvar em PDF
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Abre a caixa de impressão do navegador formatada sem menus nem botões, pronta para salvar em PDF.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => window.print()}
-                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
-                    >
-                      <Printer className="size-4" aria-hidden="true" />
-                      <span>Imprimir / Salvar PDF</span>
-                    </button>
+                {/* ── SECTION A: EXPORTAR SEMANA ATUAL ── */}
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="font-serif text-base font-semibold text-foreground">Exportar Semana Atual</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Exporta apenas a semana em exibição ({activeWeek?.title ?? "—"})
+                      com programação, respostas, progresso e análise do Gemini (quando disponível).
+                    </p>
                   </div>
 
-                  {/* Option 2: Markdown Export */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <FileText className="size-5" aria-hidden="true" />
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* PDF / Print */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                          <Printer className="size-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">Imprimir ou Salvar em PDF</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Abre a impressão do navegador formatada em A4 sem menus, botões ou sidebar.
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-foreground">
-                          Exportar para Markdown (.md)
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Baixa um documento estruturado com todo o conteúdo do guia, metas e respostas preenchidas da semana ativa.
-                        </p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                      >
+                        <Printer className="size-4" aria-hidden="true" />
+                        <span>Imprimir / Salvar PDF</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={exportToMarkdown}
-                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
-                    >
-                      <FileText className="size-4" aria-hidden="true" />
-                      <span>Baixar Markdown (.md)</span>
-                    </button>
+
+                    {/* Markdown */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                          <FileText className="size-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">Exportar como Markdown (.md)</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Documento estruturado e legível com todo o conteúdo da semana: metas, respostas e veredito.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={exportToMarkdown}
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                      >
+                        <FileText className="size-4" aria-hidden="true" />
+                        <span>Baixar Markdown (.md)</span>
+                      </button>
+                    </div>
+
+                    {/* Week JSON */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+                          <FileJson className="size-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-foreground">Exportar Semana como JSON</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            JSON estruturado com schedule, responses, tasks, progress, completionSnapshot e aiReview.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={exportWeekJSON}
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                      >
+                        <FileJson className="size-4" aria-hidden="true" />
+                        <span>Baixar Semana (.json)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
+                {/* ── SECTION B: BACKUP COMPLETO ── */}
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="font-serif text-base font-semibold text-foreground">Backup Completo</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Todas as {weeks.length} {weeks.length === 1 ? "semana" : "semanas"} + preferências de tema e paleta.
+                      Não inclui API keys ou credenciais.
+                    </p>
                   </div>
 
-                  {/* Option 3: JSON Backup Export & Import */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
                         <Database className="size-5" aria-hidden="true" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-foreground">
-                          Backup Completo de Dados (JSON)
-                        </h4>
+                        <h4 className="text-sm font-semibold text-foreground">Backup Completo (.json)</h4>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Baixe um arquivo de backup em JSON com todas as suas semanas e preferências, ou restaure um backup.
+                          Arquivo de backup com todas as semanas. Use para transferir dados entre dispositivos ou navegadores.
                         </p>
                       </div>
                     </div>
@@ -922,6 +1034,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     </div>
                   </div>
                 </div>
+
               </div>
             )}
           </div>
