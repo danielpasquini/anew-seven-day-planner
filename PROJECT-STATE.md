@@ -1,6 +1,6 @@
 # PROJECT-STATE.md — Guia de Retomada (Ciclos Semanais)
 
-> Última atualização: 2026-08-13
+> Última atualização: 2026-08-13 (Auditoria E2E Concluída)
 > Baseline commit: `f5c3f16` (tag: v0-import)
 
 ---
@@ -192,3 +192,10 @@ type WeekInstance = {
 - **Export Semana Atual**: PDF (window.print A4), Markdown, JSON semana (exportVersion, guide, metadata, schedule, responses, tasks, progress, completionSnapshot, aiReview).
 - **Backup Completo**: JSON com todas as semanas + tema/paleta; sem API keys ou credenciais.
 - **Import com confirmação**: Parsing e validação antes de sobrescrever; preview de semanas + data de exportação; cancelável.
+- **Auditoria E2E**:
+  - **Semanas**: 7 dias fixos por semana, criação, exclusão, troca, isolamento de dados e navegação anterior/próxima validados.
+  - **Programação**: Adição, edição, exclusão, reordenação (up/down), checkboxes e computação de porcentagem validados.
+  - **Configurações**: Todas as 4 abas (Semanas, Programação, Aparência, Exportação) e dialogs funcionais e responsivos.
+  - **Aparência**: As 5 paletas (Sage, Terracotta, Blue, Graphite, Olive) × 3 temas (Light, Dark, System) validados com contraste WCAG ≥ 4.5:1.
+  - **Conclusão de Semana**: Snapshots de progresso, revisão estruturada via Gemini AI REST, reabertura e reconclusão testados.
+  - **Responsividade**: Testado e verificado nos viewports `320px`, `375px`, `402px`, `430px` (iPhone 17 portrait), `768px`, `1024px` e `1440px` sem overflow horizontal e com touch targets adequados (≥ 44px).
