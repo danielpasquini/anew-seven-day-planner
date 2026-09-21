@@ -15,6 +15,8 @@ export function InteractiveScheduleBlock() {
     updateScheduleActivity,
     deleteScheduleActivity,
     moveScheduleActivity,
+    locale,
+    t,
   } = useStore()
 
   const [editingAct, setEditingAct] = useState<ScheduleActivity | null>(null)
@@ -28,7 +30,7 @@ export function InteractiveScheduleBlock() {
 
   if (!activeWeek) return null
 
-  const days = getWeekDays(activeWeek.startDate)
+  const days = getWeekDays(activeWeek.startDate, locale)
   const activities = activeWeek.programacao?.activities || []
 
   const handleOpenAdd = (dayIndex: number) => {
@@ -97,8 +99,8 @@ export function InteractiveScheduleBlock() {
                 <button
                   type="button"
                   onClick={() => handleOpenAdd(day.dayIndex)}
-                  title={`Adicionar atividade em ${day.dayNumberLabel}`}
-                  aria-label={`Adicionar atividade em ${day.dayNumberLabel}`}
+                  title={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
+                  aria-label={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation"
                 >
                   <Plus className="size-3.5" aria-hidden="true" />
@@ -108,7 +110,7 @@ export function InteractiveScheduleBlock() {
               {/* Day Activities List */}
               <div className="flex-1 space-y-2 min-h-[5rem]">
                 {dayActs.length === 0 ? (
-                  <p className="py-4 text-center text-xs italic text-muted-foreground">Sem atividades</p>
+                  <p className="py-4 text-center text-xs italic text-muted-foreground">{t.schedule.emptyDay}</p>
                 ) : (
                   dayActs.map((act, index) => {
                     const done = isDone(act.id)
@@ -127,7 +129,7 @@ export function InteractiveScheduleBlock() {
                           <button
                             type="button"
                             aria-pressed={done}
-                            aria-label={done ? `Desmarcar: ${act.description}` : `Marcar como feito: ${act.description}`}
+                            aria-label={done ? `${t.common.cancel}: ${act.description}` : `${t.common.done}: ${act.description}`}
                             onClick={() => toggleDone(act.id)}
                             className={cn(
                               "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition touch-manipulation",
@@ -146,7 +148,7 @@ export function InteractiveScheduleBlock() {
                               </span>
                               {isNonCountable && (
                                 <span className="rounded bg-muted px-1 py-0.2 text-[9px] text-muted-foreground">
-                                  Informativa
+                                  {t.schedule.infoBadge}
                                 </span>
                               )}
                             </div>
@@ -164,8 +166,8 @@ export function InteractiveScheduleBlock() {
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "up")}
                             disabled={index === 0}
-                            title="Mover para cima"
-                            aria-label="Mover para cima"
+                            title={t.schedule.orderUp}
+                            aria-label={t.schedule.orderUp}
                             className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                           >
                             <ArrowUp className="size-3" aria-hidden="true" />
@@ -174,8 +176,8 @@ export function InteractiveScheduleBlock() {
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "down")}
                             disabled={index === dayActs.length - 1}
-                            title="Mover para baixo"
-                            aria-label="Mover para baixo"
+                            title={t.schedule.orderDown}
+                            aria-label={t.schedule.orderDown}
                             className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                           >
                             <ArrowDown className="size-3" aria-hidden="true" />
@@ -183,8 +185,8 @@ export function InteractiveScheduleBlock() {
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(act)}
-                            title="Editar"
-                            aria-label={`Editar: ${act.description}`}
+                            title={t.schedule.editActivity}
+                            aria-label={`${t.schedule.editActivity}: ${act.description}`}
                             className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-primary touch-manipulation"
                           >
                             <Edit2 className="size-3" aria-hidden="true" />
@@ -192,8 +194,8 @@ export function InteractiveScheduleBlock() {
                           <button
                             type="button"
                             onClick={() => deleteScheduleActivity(act.id)}
-                            title="Excluir"
-                            aria-label={`Excluir: ${act.description}`}
+                            title={t.schedule.deleteActivity}
+                            aria-label={`${t.schedule.deleteActivity}: ${act.description}`}
                             className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-destructive touch-manipulation"
                           >
                             <Trash2 className="size-3" aria-hidden="true" />
@@ -209,10 +211,10 @@ export function InteractiveScheduleBlock() {
               <button
                 type="button"
                 onClick={() => handleOpenAdd(day.dayIndex)}
-                aria-label={`Adicionar atividade em ${day.dayNumberLabel}`}
+                aria-label={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
                 className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/80 py-2 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition touch-manipulation"
               >
-                <Plus className="size-3" aria-hidden="true" /> Adicionar
+                <Plus className="size-3" aria-hidden="true" /> {t.common.create}
               </button>
             </div>
           )
@@ -225,7 +227,7 @@ export function InteractiveScheduleBlock() {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="dialog"
           aria-modal="true"
-          aria-label={editingAct ? "Editar Atividade" : "Nova Atividade"}
+          aria-label={editingAct ? t.schedule.editActivity : t.schedule.addActivity}
         >
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
@@ -238,13 +240,13 @@ export function InteractiveScheduleBlock() {
           >
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-serif text-lg font-semibold text-foreground">
-                {editingAct ? "Editar Atividade" : "Nova Atividade"}
+                {editingAct ? t.schedule.editActivity : t.schedule.addActivity}
               </h4>
               <button
                 type="button"
                 onClick={handleClose}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Fechar"
+                aria-label={t.common.close}
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -253,12 +255,11 @@ export function InteractiveScheduleBlock() {
             <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-foreground">
-                  Dia da Semana
+                  {t.schedule.dayOfWeek}
                 </label>
                 <select
                   value={daySelect}
                   onChange={(e) => setDaySelect(Number(e.target.value))}
-                  /* 16px prevents iOS zoom */
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 >
                   {days.map((d) => (
@@ -271,29 +272,27 @@ export function InteractiveScheduleBlock() {
 
               <div>
                 <label className="mb-1 block text-xs font-semibold text-foreground">
-                  Horário
+                  {t.schedule.timeLabel}
                 </label>
                 <input
                   type="text"
                   placeholder="Ex: 16:30"
                   value={timeInput}
                   onChange={(e) => setTimeInput(e.target.value)}
-                  /* 16px prevents iOS zoom */
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
 
               <div>
                 <label className="mb-1 block text-xs font-semibold text-foreground">
-                  Descrição da Tarefa
+                  {t.schedule.descLabel}
                 </label>
                 <textarea
                   rows={3}
                   required
-                  placeholder="Descrição da atividade..."
+                  placeholder={t.schedule.activityPlaceholder}
                   value={descInput}
                   onChange={(e) => setDescInput(e.target.value)}
-                  /* 16px prevents iOS zoom */
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
@@ -307,7 +306,7 @@ export function InteractiveScheduleBlock() {
                   className="size-4 rounded border-input text-primary focus:ring-primary"
                 />
                 <label htmlFor="countsTowardCompletion" className="text-xs font-medium text-foreground cursor-pointer">
-                  Esta atividade conta para a porcentagem de conclusão da semana
+                  {t.schedule.countsTowardCompletionDesc}
                 </label>
               </div>
 
@@ -317,13 +316,13 @@ export function InteractiveScheduleBlock() {
                   onClick={handleClose}
                   className="rounded-md border border-input px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent touch-manipulation"
                 >
-                  Cancelar
+                  {t.common.cancel}
                 </button>
                 <button
                   type="submit"
                   className="rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 touch-manipulation"
                 >
-                  {editingAct ? "Salvar Alterações" : "Adicionar Tarefa"}
+                  {editingAct ? t.common.save : t.common.create}
                 </button>
               </div>
             </form>

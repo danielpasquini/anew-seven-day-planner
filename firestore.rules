@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    // Verify if the request is made by an authenticated user
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Verify if the authenticated user is the resource owner
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // =========================================================================
+    // USER DATA ISOLATION (users/{userId} and all subcollections)
+    // =========================================================================
+
+    // User profile and top-level document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // User Settings / Preferences (theme, palette, default locale, bible version)
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // User GuideTemplates
+      match /guides/{guideId} {
+        allow read, write: if isOwner(userId);
+
+        // Nested WeekInstances under GuideTemplate
+        match /weeks/{weekId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
+
+      // Flat WeekInstances (if queryable directly per user)
+      match /weeks/{weekId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Catch-all safety boundary: any future subcollection under users/{userId}
+      // is strictly restricted to the resource owner only.
+      match /{allSubcollections=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // =========================================================================
+    // GLOBAL DEFAULT DENY
+    // Any document or collection not explicitly matched above is blocked.
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

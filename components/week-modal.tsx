@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Calendar, AlertTriangle, X } from "lucide-react"
-import { calculateInclusiveEndDate, formatDateRangeBR, getNextDayDate, getTodayFormatted } from "@/lib/date-utils"
+import { calculateInclusiveEndDate, formatDateRangeLocale, getNextDayDate, getTodayFormatted } from "@/lib/date-utils"
 import { useStore, type WeekInstance } from "@/lib/store"
 
 type CreateModalProps = {
@@ -11,7 +11,7 @@ type CreateModalProps = {
 }
 
 export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
-  const { weeks, createWeek } = useStore()
+  const { weeks, createWeek, locale, t } = useStore()
 
   const [title, setTitle] = useState("")
   const [startDate, setStartDate] = useState("")
@@ -27,14 +27,14 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
       } else {
         setStartDate(getTodayFormatted())
       }
-      setTitle(`Semana ${weeks.length + 1}`)
+      setTitle(`${t.week.weekNumberLabel} ${weeks.length + 1}`)
     }
-  }, [isOpen, weeks])
+  }, [isOpen, weeks, t])
 
   if (!isOpen) return null
 
   const endDate = calculateInclusiveEndDate(startDate)
-  const rangeFormatted = formatDateRangeBR(startDate, endDate)
+  const rangeFormatted = formatDateRangeLocale(startDate, endDate, locale)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,13 +65,13 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
               <Calendar className="size-4" aria-hidden="true" />
             </div>
             <h3 id="create-week-title" className="font-serif text-lg font-semibold text-foreground">
-              Criar Nova Semana
+              {t.week.createTitle}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
+            aria-label={t.common.close}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
           >
             <X className="size-4" aria-hidden="true" />
@@ -81,36 +81,34 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Nome da Semana
+              {t.week.titleLabel}
             </label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="ex: Semana 2 ou Semana Especial"
-              /* font-size 1rem (16px) prevents iOS auto-zoom */
+              placeholder={`ex: ${t.week.weekNumberLabel} 2`}
               className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-base text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             />
           </div>
 
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Data de Início
+              {t.week.startDateLabel}
             </label>
             <input
               type="date"
               required
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              /* font-size 1rem (16px) prevents iOS auto-zoom */
               className="w-full rounded-md border border-input bg-card px-3 py-2.5 text-base text-foreground shadow-xs outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             />
           </div>
 
           {startDate && (
             <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs leading-relaxed text-foreground/90">
-              <span className="font-semibold text-gold-foreground">Período de 7 dias (inclusivo):</span>
+              <span className="font-semibold text-gold-foreground">{t.hero.sevenDaysCycle}:</span>
               <p className="mt-0.5 font-medium text-foreground">{rangeFormatted}</p>
             </div>
           )}
@@ -121,13 +119,13 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
               onClick={onClose}
               className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
             >
-              Cancelar
+              {t.common.cancel}
             </button>
             <button
               type="submit"
               className="rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
             >
-              Criar Semana
+              {t.common.create}
             </button>
           </div>
         </form>
@@ -143,11 +141,11 @@ type DeleteModalProps = {
 }
 
 export function DeleteWeekModal({ week, isOpen, onClose }: DeleteModalProps) {
-  const { deleteWeek } = useStore()
+  const { deleteWeek, locale, t } = useStore()
 
   if (!isOpen || !week) return null
 
-  const rangeFormatted = formatDateRangeBR(week.startDate, week.endDate)
+  const rangeFormatted = formatDateRangeLocale(week.startDate, week.endDate, locale)
 
   const handleDelete = () => {
     deleteWeek(week.id)
@@ -176,13 +174,14 @@ export function DeleteWeekModal({ week, isOpen, onClose }: DeleteModalProps) {
           </div>
           <div>
             <h3 id="delete-week-title" className="font-serif text-lg font-semibold text-foreground">
-              Excluir Semana?
+              {t.week.deleteTitle}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Você está prestes a excluir <strong className="text-foreground">{week.title}</strong> ({rangeFormatted}).
+              {t.week.deletePromptPrefix}{" "}
+              <strong className="text-foreground">{week.title}</strong> ({rangeFormatted}).
             </p>
             <p className="mt-2 text-xs text-destructive font-medium">
-              Todas as respostas, reflexões e tarefas marcadas nesta semana serão apagadas permanentemente. Esta ação não pode ser desfeita.
+              {t.week.deleteDesc}
             </p>
           </div>
         </div>
@@ -193,14 +192,14 @@ export function DeleteWeekModal({ week, isOpen, onClose }: DeleteModalProps) {
             onClick={onClose}
             className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
           >
-            Cancelar
+            {t.common.cancel}
           </button>
           <button
             type="button"
             onClick={handleDelete}
             className="rounded-md bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground shadow-xs hover:bg-destructive/90 transition touch-manipulation"
           >
-            Confirmar Exclusão
+            {t.week.deleteConfirm}
           </button>
         </div>
       </div>

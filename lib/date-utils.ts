@@ -1,6 +1,8 @@
 /**
- * Utility functions for handling 7-day week instances and PT-BR date formatting
+ * Utility functions for handling 7-day week instances and localized date formatting
  */
+
+export type Locale = "pt-BR" | "en-US"
 
 export function getTodayFormatted(): string {
   const d = new Date()
@@ -46,33 +48,67 @@ export function getNextDayDate(dateStr: string): string {
 }
 
 /**
- * Format YYYY-MM-DD to DD/MM/YYYY
+ * Format YYYY-MM-DD to localized date string
  */
-export function formatDateBR(dateStr: string): string {
+export function formatDateLocale(dateStr: string, locale: Locale = "pt-BR"): string {
   if (!dateStr) return ""
-  const parts = dateStr.split("-")
+  const parts = dateStr.split("-").map(Number)
   if (parts.length !== 3) return dateStr
   const [year, month, day] = parts
-  return `${day}/${month}/${year}`
+  const d = new Date(year, month - 1, day)
+  return new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" }).format(d)
+}
+
+export function formatDateBR(dateStr: string): string {
+  return formatDateLocale(dateStr, "pt-BR")
 }
 
 /**
- * Format range, e.g. "10/08 a 16/08/2026" or "10/08/2026 a 16/08/2026"
+ * Format range, e.g.:
+ * pt-BR: "10 a 16/08/2026" or "10 a 16 de agosto de 2026"
+ * en-US: "August 10–16, 2026"
  */
-export function formatDateRangeBR(startDateStr: string, endDateStr: string): string {
+export function formatDateRangeLocale(startDateStr: string, endDateStr: string, locale: Locale = "pt-BR"): string {
   if (!startDateStr || !endDateStr) return ""
-  const [sy, sm, sd] = startDateStr.split("-")
-  const [ey, em, ed] = endDateStr.split("-")
+  const [sy, sm, sd] = startDateStr.split("-").map(Number)
+  const [ey, em, ed] = endDateStr.split("-").map(Number)
 
   if (!sy || !ey) return ""
 
+  const start = new Date(sy, sm - 1, sd)
+  const end = new Date(ey, em - 1, ed)
+
+  if (locale === "en-US") {
+    const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long" })
+    const startMonth = monthFormatter.format(start)
+    const endMonth = monthFormatter.format(end)
+
+    if (sy === ey) {
+      if (sm === em) {
+        return `${startMonth} ${sd}–${ed}, ${sy}`
+      }
+      return `${startMonth} ${sd} – ${endMonth} ${ed}, ${sy}`
+    }
+    return `${startMonth} ${sd}, ${sy} – ${endMonth} ${ed}, ${ey}`
+  }
+
+  // pt-BR
   if (sy === ey) {
     if (sm === em) {
-      return `${sd} a ${ed}/${sm}/${sy}`
+      const smStr = String(sm).padStart(2, "0")
+      return `${String(sd).padStart(2, "0")} a ${String(ed).padStart(2, "0")}/${smStr}/${sy}`
     }
-    return `${sd}/${sm} a ${ed}/${em}/${sy}`
+    const smStr = String(sm).padStart(2, "0")
+    const emStr = String(em).padStart(2, "0")
+    return `${String(sd).padStart(2, "0")}/${smStr} a ${String(ed).padStart(2, "0")}/${emStr}/${sy}`
   }
-  return `${sd}/${sm}/${sy} a ${ed}/${em}/${ey}`
+  const smStr = String(sm).padStart(2, "0")
+  const emStr = String(em).padStart(2, "0")
+  return `${String(sd).padStart(2, "0")}/${smStr}/${sy} a ${String(ed).padStart(2, "0")}/${emStr}/${ey}`
+}
+
+export function formatDateRangeBR(startDateStr: string, endDateStr: string): string {
+  return formatDateRangeLocale(startDateStr, endDateStr, "pt-BR")
 }
 
 export type WeekDayInfo = {
@@ -87,13 +123,13 @@ export type WeekDayInfo = {
  * Returns an array of 7 day objects for a week starting at startDateStr:
  * [{ dayIndex: 0, dateStr: "2026-08-10", dayName: "Seg", dayNumberLabel: "Dia 1", formattedShort: "Seg 10/08" }, ...]
  */
-export function getWeekDays(startDateStr: string): WeekDayInfo[] {
+export function getWeekDays(startDateStr: string, locale: Locale = "pt-BR"): WeekDayInfo[] {
   if (!startDateStr) return []
   const parts = startDateStr.split("-").map(Number)
   if (parts.length !== 3) return []
   const [year, month, day] = parts
 
-  const dayNamesShort = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+  const dayFormatter = new Intl.DateTimeFormat(locale, { weekday: "short" })
 
   const days: WeekDayInfo[] = []
   for (let i = 0; i < 7; i++) {
@@ -102,13 +138,20 @@ export function getWeekDays(startDateStr: string): WeekDayInfo[] {
     const mStr = String(d.getMonth() + 1).padStart(2, "0")
     const dStr = String(d.getDate()).padStart(2, "0")
     const fullDate = `${yStr}-${mStr}-${dStr}`
-    const name = dayNamesShort[d.getDay()]
+    
+    // Capitalize short weekday name
+    const rawName = dayFormatter.format(d).replace(".", "")
+    const name = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+
+    const dayNumberLabel = locale === "en-US" ? `Day ${i + 1}` : `Dia ${i + 1}`
+    const formattedShort = locale === "en-US" ? `${name} ${mStr}/${dStr}` : `${name} ${dStr}/${mStr}`
+
     days.push({
       dayIndex: i,
       dateStr: fullDate,
       dayName: name,
-      dayNumberLabel: `Dia ${i + 1}`,
-      formattedShort: `${name} ${dStr}/${mStr}`,
+      dayNumberLabel,
+      formattedShort,
     })
   }
   return days

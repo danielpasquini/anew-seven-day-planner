@@ -17,10 +17,15 @@ import {
   Monitor,
   CheckCircle2,
   Sparkles,
+  Check,
+  AlertCircle,
+  CloudOff,
+  RefreshCw,
 } from "lucide-react"
 import { DEFAULT_GUIDE_TEMPLATE, intro, sections } from "@/lib/guide-data"
 import { useStore, type WeekInstance } from "@/lib/store"
-import { formatDateRangeBR } from "@/lib/date-utils"
+import { BibleProvider } from "@/lib/bible/bible-provider"
+import { formatDateRangeLocale } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { SectionCard } from "@/components/section-card"
 import { CreateWeekModal, DeleteWeekModal } from "@/components/week-modal"
@@ -28,6 +33,7 @@ import { SettingsModal } from "@/components/settings-modal"
 import { CompleteWeekModal } from "@/components/complete-week-modal"
 import { WeekReviewCard } from "@/components/week-review-card"
 import { MyGuidesModal } from "@/components/my-guides-modal"
+import { MigrationBanner } from "@/components/migration-banner"
 
 export function GuideApp() {
   const {
@@ -42,6 +48,11 @@ export function GuideApp() {
     resetActiveWeek,
     theme,
     setTheme,
+    locale,
+    bibleVersion,
+    t,
+    saveStatus,
+    retrySync,
   } = useStore()
 
   const [navOpen, setNavOpen] = useState(false)
@@ -53,6 +64,10 @@ export function GuideApp() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">("semanas")
   const [activeSection, setActiveSection] = useState(sections[0]?.id)
+  const [showMigrationBanner, setShowMigrationBanner] = useState(false)
+
+  const guideSections = activeGuide.sections || sections
+  const guideIntro = activeGuide.intro || intro
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -63,27 +78,21 @@ export function GuideApp() {
       },
       { rootMargin: "-20% 0px -70% 0px", threshold: 0 },
     )
-    for (const s of sections) {
+    for (const s of guideSections) {
       const el = document.getElementById(s.id)
       if (el) observer.observe(el)
     }
     return () => observer.disconnect()
-  }, [])
+  }, [guideSections])
 
   const handleReset = () => {
-    if (
-      window.confirm(
-        `Isso apagará todas as respostas e tarefas salvas APENAS para a "${
-          activeWeek?.title ?? "semana atual"
-        }". Deseja continuar?`
-      )
-    ) {
+    if (window.confirm(t.hero.resetWeekConfirm)) {
       resetActiveWeek()
     }
   }
 
   const dateRangeStr = activeWeek
-    ? formatDateRangeBR(activeWeek.startDate, activeWeek.endDate)
+    ? formatDateRangeLocale(activeWeek.startDate, activeWeek.endDate, locale)
     : ""
 
   return (
@@ -137,7 +146,7 @@ export function GuideApp() {
                 <span className="truncate">{activeWeek.title}</span>
                 {activeWeek.status === "completed" ? (
                   <span className="rounded bg-primary/20 text-[0.65rem] px-1 py-0.2 font-bold shrink-0">
-                    Concluída · {activeWeek.progresso.percentual}%
+                    {t.common.completed} · {activeWeek.progresso.percentual}%
                   </span>
                 ) : (
                   <span className="hidden lg:inline text-[0.7rem] font-normal text-primary/70 shrink-0">
@@ -166,18 +175,45 @@ export function GuideApp() {
 
           {/* Right Action Controls */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Completar semana button (if active) */}
+            {/* Realtime Save / Sync Status Badge */}
+            {saveStatus !== "idle" && (
+              <div
+                className={cn(
+                  "hidden sm:flex items-center gap-1 rounded-md px-2 py-1 text-[0.7rem] font-medium transition",
+                  saveStatus === "saving" && "bg-primary/10 text-primary",
+                  saveStatus === "saved" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  saveStatus === "error" && "bg-destructive/10 text-destructive cursor-pointer hover:bg-destructive/20",
+                  saveStatus === "offline" && "bg-muted text-muted-foreground"
+                )}
+                onClick={saveStatus === "error" ? retrySync : undefined}
+                title={saveStatus === "error" ? t.sync.retry : undefined}
+                role={saveStatus === "error" ? "button" : undefined}
+                tabIndex={saveStatus === "error" ? 0 : undefined}
+              >
+                {saveStatus === "saving" && <RefreshCw className="size-3 animate-spin" aria-hidden="true" />}
+                {saveStatus === "saved" && <Check className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />}
+                {saveStatus === "error" && <AlertCircle className="size-3" aria-hidden="true" />}
+                {saveStatus === "offline" && <CloudOff className="size-3" aria-hidden="true" />}
+                <span>
+                  {saveStatus === "saving" && t.sync.saving}
+                  {saveStatus === "saved" && t.sync.saved}
+                  {saveStatus === "error" && t.sync.error}
+                  {saveStatus === "offline" && t.sync.offline}
+                </span>
+              </div>
+            )}
+
+            {/* Completar Semana */}
             {activeWeek && activeWeek.status === "active" && (
               <button
                 type="button"
                 onClick={() => setCompleteModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 touch-manipulation min-h-[2rem]"
-                title="Concluir formalmente a semana"
-                aria-label="Completar semana"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
+                aria-label={t.nav.completeWeek}
               >
                 <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Completar semana</span>
-                <span className="sm:hidden">Completar</span>
+                <span className="hidden sm:inline">{t.nav.completeWeek}</span>
+                <span className="sm:hidden">{t.common.completed}</span>
               </button>
             )}
 
@@ -205,11 +241,11 @@ export function GuideApp() {
               type="button"
               onClick={() => setMyGuidesModalOpen(true)}
               className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
-              title="Gerenciar Meus Guias"
-              aria-label="Meus Guias"
+              title={t.nav.myGuides}
+              aria-label={t.nav.myGuides}
             >
               <BookOpen className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden md:inline text-xs font-semibold">Meus Guias</span>
+              <span className="hidden md:inline text-xs font-semibold">{t.nav.myGuides}</span>
             </button>
 
             {/* Settings */}
@@ -220,11 +256,11 @@ export function GuideApp() {
                 setSettingsModalOpen(true)
               }}
               className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
-              title="Abrir configurações do aplicativo"
-              aria-label="Configurações"
+              title={t.nav.settings}
+              aria-label={t.nav.settings}
             >
               <Settings className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden md:inline text-xs font-semibold">Configurações</span>
+              <span className="hidden md:inline text-xs font-semibold">{t.nav.settings}</span>
             </button>
 
             {/* Nova Semana */}
@@ -232,10 +268,10 @@ export function GuideApp() {
               type="button"
               onClick={() => setCreateModalOpen(true)}
               className="hidden lg:flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
-              aria-label="Nova semana"
+              aria-label={t.nav.newWeek}
             >
               <Plus className="size-3.5" aria-hidden="true" />
-              <span>Nova Semana</span>
+              <span>{t.nav.newWeek}</span>
             </button>
 
             {/* Mobile: Weeks drawer */}
@@ -243,8 +279,8 @@ export function GuideApp() {
               type="button"
               onClick={() => setWeeksDrawerOpen(true)}
               className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-accent lg:hidden touch-manipulation"
-              aria-label="Gerenciar semanas"
-              title="Semanas"
+              aria-label={t.nav.weeks}
+              title={t.nav.weeks}
             >
               <Calendar className="size-4" aria-hidden="true" />
             </button>
@@ -254,8 +290,8 @@ export function GuideApp() {
               type="button"
               onClick={() => setNavOpen(true)}
               className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-accent lg:hidden touch-manipulation"
-              aria-label="Abrir índice"
-              title="Índice"
+              aria-label={t.nav.index}
+              title={t.nav.index}
             >
               <List className="size-4" aria-hidden="true" />
             </button>
@@ -273,16 +309,16 @@ export function GuideApp() {
             </span>
             {activeWeek?.status === "completed" && (
               <span className="rounded bg-primary/20 text-primary px-2 py-0.2 text-[0.65rem] font-bold">
-                Concluída · {activeWeek.progresso.percentual}%
+                {t.common.completed} · {activeWeek.progresso.percentual}%
               </span>
             )}
           </div>
 
           <h1 className="font-serif text-2xl font-semibold leading-tight text-primary text-balance sm:text-4xl md:text-5xl">
-            {intro.title}
+            {activeGuide.title}
           </h1>
           <p className="mx-auto mt-3 max-w-xl font-serif text-sm italic leading-relaxed text-foreground/90 text-pretty sm:text-base sm:mt-4 md:text-lg">
-            {intro.subtitle}
+            {activeGuide.description || t.hero.subtitle}
           </p>
 
           {/* Action button in Hero if week is active */}
@@ -294,32 +330,33 @@ export function GuideApp() {
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition touch-manipulation"
               >
                 <Sparkles className="size-4" aria-hidden="true" />
-                <span>Completar esta semana</span>
+                <span>{t.nav.completeWeek}</span>
               </button>
             </div>
           )}
 
-          <div className="mx-auto mt-6 max-w-xl rounded-xl border border-primary/15 bg-card p-4 text-left shadow-xs sm:mt-8 sm:p-6">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary/80">Oração de abertura</p>
-            <p className="font-serif text-sm italic leading-relaxed text-foreground text-pretty sm:text-base">
-              {intro.oracao}
-            </p>
-            <div className="mt-4 border-t border-border pt-4">
-              <p className="font-serif text-sm font-semibold text-primary">{intro.salmo.ref}</p>
-              <p className="mt-2 text-xs leading-relaxed text-foreground/80 text-pretty sm:text-sm">
-                <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                  ARA{" "}
-                </span>
-                {intro.salmo.ara}
+          {/* Prayer & Psalm (Only when theologyEnabled is true) */}
+          {activeGuide.theologyEnabled && activeGuide.intro?.oracao && (
+            <div className="mx-auto mt-6 max-w-xl rounded-xl border border-primary/20 bg-card/80 p-4 sm:p-5 shadow-xs text-left">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary/80 mb-1">
+                {t.scripture.prayer}
               </p>
-              <p className="mt-2 text-xs leading-relaxed text-foreground/80 text-pretty sm:text-sm">
-                <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                  NVT{" "}
-                </span>
-                {intro.salmo.nvt}
+              <p className="font-serif text-sm italic leading-relaxed text-foreground/90 text-pretty">
+                &quot;{activeGuide.intro.oracao}&quot;
               </p>
+
+              {activeGuide.intro.salmo && (
+                <div className="mt-3 pt-3 border-t border-border/80">
+                  <p className="text-xs font-semibold text-primary mb-1">
+                    {activeGuide.intro.salmo.ref}
+                  </p>
+                  <p className="font-serif text-xs italic leading-relaxed text-muted-foreground text-pretty">
+                    {BibleProvider.resolvePassage(activeGuide.intro.salmo.ref, bibleVersion, locale).text || activeGuide.intro.salmo.ara}
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -331,7 +368,7 @@ export function GuideApp() {
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-1.5">
                 <Calendar className="size-4 text-primary" aria-hidden="true" />
-                <h3 className="font-serif text-sm font-semibold text-foreground">Semanas</h3>
+                <h3 className="font-serif text-sm font-semibold text-foreground">{t.nav.weeks}</h3>
               </div>
               <button
                 type="button"
@@ -339,7 +376,7 @@ export function GuideApp() {
                 className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs touch-manipulation"
               >
                 <Plus className="size-3" aria-hidden="true" />
-                <span>Nova</span>
+                <span>{t.common.create}</span>
               </button>
             </div>
 
@@ -347,7 +384,7 @@ export function GuideApp() {
               {weeks.map((w) => {
                 const isActive = w.id === activeWeek?.id
                 const isCompleted = w.status === "completed"
-                const range = formatDateRangeBR(w.startDate, w.endDate)
+                const range = formatDateRangeLocale(w.startDate, w.endDate, locale)
 
                 return (
                   <div
@@ -370,12 +407,12 @@ export function GuideApp() {
                         </span>
                         {isActive && (
                           <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.2 text-[0.6rem] font-bold">
-                            Atual
+                            {t.common.active}
                           </span>
                         )}
                         {isCompleted && (
                           <span className="rounded bg-primary/15 text-primary px-1.5 py-0.2 text-[0.6rem] font-medium">
-                            Concluída · {w.progresso.percentual}%
+                            {t.common.completed} · {w.progresso.percentual}%
                           </span>
                         )}
                       </div>
@@ -406,10 +443,10 @@ export function GuideApp() {
             {/* Table of Contents */}
             <div className="mt-5 pt-4 border-t border-border">
               <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                Índice de Seções
+                {t.nav.index}
               </p>
-              <nav aria-label="Índice de seções" className="space-y-0.5 max-h-[38vh] overflow-y-auto pr-1">
-                {sections.map((s) => (
+              <nav aria-label={t.nav.index} className="space-y-0.5 max-h-[38vh] overflow-y-auto pr-1">
+                {activeGuide.sections.map((s) => (
                   <a
                     key={s.id}
                     href={`#${s.id}`}
@@ -431,16 +468,21 @@ export function GuideApp() {
 
         {/* Main Content Sections */}
         <main className="min-w-0 flex-1 space-y-6 sm:space-y-8">
+          {/* Local Data Cloud Migration Banner */}
+          {showMigrationBanner && (
+            <MigrationBanner onDismiss={() => setShowMigrationBanner(false)} />
+          )}
+
           {/* Week Review Card (when completed) */}
           <WeekReviewCard />
 
-          {sections.map((s) => (
+          {activeGuide.sections.map((s) => (
             <SectionCard key={s.id} section={s} />
           ))}
 
           <footer className="pt-6 text-center border-t border-border/60">
             <p className="text-xs text-muted-foreground">
-              Guia Pessoal de Retomada · As respostas desta semana ({activeWeek?.title}) ficam salvas isoladamente neste navegador.
+              {activeGuide.title} · {t.guide.answersSavedLocally}
             </p>
           </footer>
         </main>
@@ -462,13 +504,13 @@ export function GuideApp() {
               <div className="mb-4 flex items-center justify-between pb-3 border-b border-border">
                 <div className="flex items-center gap-2">
                   <Calendar className="size-4 text-primary" aria-hidden="true" />
-                  <h3 className="font-serif text-base font-semibold text-foreground">Semanas do Guia</h3>
+                  <h3 className="font-serif text-base font-semibold text-foreground">{t.nav.weeks}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setWeeksDrawerOpen(false)}
                   className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Fechar"
+                  aria-label={t.common.close}
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
@@ -484,7 +526,7 @@ export function GuideApp() {
                   className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 px-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                 >
                   <Plus className="size-4" aria-hidden="true" />
-                  <span>Nova Semana</span>
+                  <span>{t.nav.newWeek}</span>
                 </button>
                 <button
                   type="button"
@@ -495,7 +537,7 @@ export function GuideApp() {
                   className="w-full flex items-center justify-center gap-2 rounded-lg border border-border bg-card py-2.5 px-3 text-xs sm:text-sm font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
                 >
                   <BookOpen className="size-4 text-primary" aria-hidden="true" />
-                  <span>Meus Guias</span>
+                  <span>{t.nav.myGuides}</span>
                 </button>
               </div>
 
@@ -503,7 +545,7 @@ export function GuideApp() {
                 {weeks.map((w) => {
                   const isActive = w.id === activeWeek?.id
                   const isCompleted = w.status === "completed"
-                  const range = formatDateRangeBR(w.startDate, w.endDate)
+                  const range = formatDateRangeLocale(w.startDate, w.endDate, locale)
 
                   return (
                     <div
@@ -531,12 +573,12 @@ export function GuideApp() {
                           </span>
                           {isActive && (
                             <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[0.65rem] font-bold">
-                              Ativa
+                              {t.common.active}
                             </span>
                           )}
                           {isCompleted && (
                             <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[0.65rem] font-medium">
-                              Concluída · {w.progresso.percentual}%
+                              {t.common.completed} · {w.progresso.percentual}%
                             </span>
                           )}
                         </div>
@@ -576,7 +618,7 @@ export function GuideApp() {
                 className="w-full flex items-center justify-center gap-2 rounded-md border border-border py-3 text-sm font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 transition touch-manipulation"
               >
                 <RotateCcw className="size-3.5" aria-hidden="true" />
-                <span>Reiniciar Respostas desta Semana</span>
+                <span>{t.hero.resetWeekAnswers}</span>
               </button>
             </div>
           </div>
@@ -585,43 +627,44 @@ export function GuideApp() {
 
       {/* Mobile Index TOC Drawer */}
       {navOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Índice de seções">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t.nav.sections}>
           <div
             className="absolute inset-0 bg-foreground/40 backdrop-blur-xs"
             aria-hidden="true"
             onClick={() => setNavOpen(false)}
           />
           <nav
-            aria-label="Índice"
+            aria-label={t.nav.index}
             className="absolute right-0 top-0 h-full w-72 max-w-[85vw] overflow-y-auto border-l border-border bg-card p-4 shadow-xl"
             style={{ paddingBottom: "env(safe-area-inset-bottom, 1rem)" }}
           >
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Índice de Seções</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.nav.sections}</p>
               <button
                 type="button"
                 onClick={() => setNavOpen(false)}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Fechar índice"
+                aria-label={t.common.close}
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
             </div>
-            <div className="space-y-0.5">
-              {sections.map((s) => (
+            {/* Mobile TOC list */}
+            <div className="p-4 space-y-1 overflow-y-auto">
+              {activeGuide.sections.map((s) => (
                 <a
                   key={s.id}
                   href={`#${s.id}`}
                   onClick={() => setNavOpen(false)}
                   className={cn(
-                    "flex items-baseline gap-2 rounded-md px-3 py-2.5 text-sm transition touch-manipulation",
+                    "flex items-baseline gap-2.5 rounded-lg px-3 py-2 text-sm transition touch-manipulation",
                     activeSection === s.id
-                      ? "bg-primary/10 font-medium text-primary"
+                      ? "bg-primary/10 font-semibold text-primary"
                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                   )}
                 >
-                  <span className="text-xs tabular-nums text-gold-foreground shrink-0">{s.number}</span>
-                  <span className="text-pretty">{s.title}</span>
+                  <span className="text-xs font-semibold tabular-nums text-gold-foreground">{s.number}</span>
+                  <span className="truncate">{s.title}</span>
                 </a>
               ))}
             </div>

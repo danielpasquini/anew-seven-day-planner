@@ -4,7 +4,7 @@ import { useState } from "react"
 import { BookOpen, Calendar, Check, Plus, Sparkles, X, Shield, Clock } from "lucide-react"
 import { useStore, type WeekInstance } from "@/lib/store"
 import { type GuideTemplate } from "@/lib/guide-data"
-import { formatDateRangeBR, getTodayFormatted } from "@/lib/date-utils"
+import { formatDateRangeLocale, getTodayFormatted } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { CreateGuideModal } from "@/components/create-guide-modal"
 
@@ -22,6 +22,8 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
     weeks,
     selectWeek,
     createWeek,
+    locale,
+    t,
   } = useStore()
 
   const [selectedGuideId, setSelectedGuideId] = useState<string>(activeGuideId)
@@ -43,7 +45,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
 
   const handleCreateWeekForGuide = (e: React.FormEvent) => {
     e.preventDefault()
-    const autoTitle = `Semana ${guideWeeks.length + 1}`
+    const autoTitle = `${t.week.weekNumberLabel} ${guideWeeks.length + 1}`
     createWeek(
       newWeekTitle.trim() || autoTitle,
       newWeekStartDate || getTodayFormatted(),
@@ -66,14 +68,14 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
           <div className="flex items-center gap-2">
             <BookOpen className="size-5 text-primary" aria-hidden="true" />
             <h2 id="my-guides-modal-title" className="font-serif text-lg font-semibold text-foreground">
-              Meus Guias
+              {t.guide.myGuidesTitle}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
-            aria-label="Fechar"
+            aria-label={t.common.close}
           >
             <X className="size-5" aria-hidden="true" />
           </button>
@@ -85,16 +87,16 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Modelos de Guia Disponíveis ({guides.length})
+                {t.guide.availableTemplates} ({guides.length})
               </h3>
               <button
                 type="button"
                 onClick={() => setCreateGuideOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation shadow-xs"
-                title="Criar novo guia personalizado"
+                title={t.guide.createNewGuideBtn}
               >
                 <Plus className="size-3.5" aria-hidden="true" />
-                <span>+ Criar Novo Guia</span>
+                <span>{t.guide.createNewGuideBtn}</span>
               </button>
             </div>
 
@@ -131,7 +133,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                         </div>
                         {isActive && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[0.65rem] font-bold text-primary shrink-0">
-                            <Check className="size-3" aria-hidden="true" /> Ativo
+                            <Check className="size-3" aria-hidden="true" /> {t.guide.activeGuideBadge}
                           </span>
                         )}
                       </div>
@@ -144,11 +146,11 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                     <div className="mt-4 flex items-center justify-between pt-3 border-t border-border/60 text-[0.7rem] text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="size-3" aria-hidden="true" />
-                        {weekCount} {weekCount === 1 ? "semana" : "semanas"}
+                        {weekCount} {weekCount === 1 ? t.week.weekSingular : t.week.weekPlural}
                       </span>
                       <span className="flex items-center gap-1">
                         <Shield className="size-3 text-gold" aria-hidden="true" />
-                        {guide.theologyEnabled ? "Teologia Ativa" : "Comportamental"}
+                        {guide.theologyEnabled ? t.guide.theologyBadge : t.guide.theologyDisabledBadge}
                       </span>
                       <span>v{guide.version || 1}</span>
                     </div>
@@ -183,7 +185,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation shrink-0"
                   >
                     <Check className="size-3.5" aria-hidden="true" />
-                    <span>Tornar Guia Ativo</span>
+                    <span>{t.guide.switchGuide}</span>
                   </button>
                 )}
               </div>
@@ -191,7 +193,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
               {/* Guide Config & Completion Dimensions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="rounded-lg bg-muted/40 p-3 border border-border space-y-1.5">
-                  <span className="font-semibold text-foreground block">Dimensões da Análise Inteligente:</span>
+                  <span className="font-semibold text-foreground block">{t.guide.analysisDimensionsTitle}:</span>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1">
                     {currentGuide.completionConfig?.analysisDimensions.map((dim, i) => (
                       <li key={i}>{dim}</li>
@@ -200,12 +202,12 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                 </div>
 
                 <div className="rounded-lg bg-muted/40 p-3 border border-border space-y-1.5">
-                  <span className="font-semibold text-foreground block">Configurações do Modelo:</span>
+                  <span className="font-semibold text-foreground block">{t.guide.templateConfig}</span>
                   <div className="text-muted-foreground space-y-1">
-                    <p>• <strong>Categoria:</strong> {currentGuide.config?.category || "Geral"}</p>
-                    <p>• <strong>Público-alvo:</strong> {currentGuide.config?.targetAudience || "Geral"}</p>
-                    <p>• <strong>Análise Teológica:</strong> {currentGuide.theologyEnabled ? "Ativada" : "Desativada"}</p>
-                    <p>• <strong>Seções no Guia:</strong> {currentGuide.sections?.length || 0} seções</p>
+                    <p>• <strong>{t.guide.category}:</strong> {currentGuide.config?.category || t.common.general}</p>
+                    <p>• <strong>{t.guide.targetAudience}:</strong> {currentGuide.config?.targetAudience || t.common.general}</p>
+                    <p>• <strong>{t.guide.theologyActiveLabel}</strong> {currentGuide.theologyEnabled ? t.common.yes : t.common.no}</p>
+                    <p>• <strong>{t.guide.sectionsInGuideLabel}</strong> {currentGuide.sections?.length || 0} {t.common.sections}</p>
                   </div>
                 </div>
               </div>
@@ -214,42 +216,42 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
               <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                   <Plus className="size-3.5 text-primary" aria-hidden="true" />
-                  Nova Semana para "{currentGuide.title}"
+                  {t.guide.createWeekForGuide}: &quot;{currentGuide.title}&quot;
                 </h4>
 
                 <form onSubmit={handleCreateWeekForGuide} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[0.7rem] font-semibold text-muted-foreground mb-1">
-                      Título da Semana
+                      {t.week.titleLabel}
                     </label>
                     <input
                       type="text"
-                      placeholder={`Ex: Semana ${guideWeeks.length + 1}`}
+                      placeholder={`Ex: ${t.week.weekNumberLabel} ${guideWeeks.length + 1}`}
                       value={newWeekTitle}
                       onChange={(e) => setNewWeekTitle(e.target.value)}
-                      className="w-full rounded-md border border-input bg-card px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring min-h-[2.5rem]"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                     />
                   </div>
 
                   <div>
                     <label className="block text-[0.7rem] font-semibold text-muted-foreground mb-1">
-                      Data de Início
+                      {t.week.startDateLabel}
                     </label>
                     <input
                       type="date"
                       value={newWeekStartDate}
                       onChange={(e) => setNewWeekStartDate(e.target.value)}
-                      className="w-full rounded-md border border-input bg-card px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring min-h-[2.5rem]"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                     />
                   </div>
 
                   <div className="flex items-end">
                     <button
                       type="submit"
-                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
+                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                     >
                       <Plus className="size-3.5" aria-hidden="true" />
-                      <span>Criar Semana</span>
+                      <span>{t.week.createTitle}</span>
                     </button>
                   </div>
                 </form>
@@ -258,17 +260,17 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
               {/* Linked Weeks List */}
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Histórico de Semanas do Guia ({guideWeeks.length})
+                  {t.week.historyTitle} ({guideWeeks.length})
                 </h4>
 
                 {guideWeeks.length === 0 ? (
                   <p className="text-xs italic text-muted-foreground p-3 border border-dashed rounded-lg text-center">
-                    Nenhuma semana cadastrada para este guia ainda.
+                    {t.week.empty}
                   </p>
                 ) : (
                   <div className="divide-y divide-border border rounded-lg bg-card overflow-hidden">
                     {guideWeeks.map((w) => {
-                      const rangeStr = formatDateRangeBR(w.startDate, w.endDate)
+                      const rangeStr = formatDateRangeLocale(w.startDate, w.endDate, locale)
                       return (
                         <div
                           key={w.id}
@@ -288,7 +290,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                                   : "bg-muted text-muted-foreground"
                               )}
                             >
-                              {w.status === "completed" ? `Concluída · ${w.progresso.percentual}%` : "Em andamento"}
+                              {w.status === "completed" ? `${t.common.completed} · ${w.progresso.percentual}%` : t.common.inProgress}
                             </span>
 
                             <button
@@ -299,7 +301,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                               }}
                               className="rounded border border-border bg-card px-2.5 py-1 font-medium hover:bg-accent transition touch-manipulation"
                             >
-                              Ver
+                              {t.common.open}
                             </button>
                           </div>
                         </div>
@@ -315,14 +317,14 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
           <span className="text-xs text-muted-foreground">
-            Guia ativo selecionado: <strong>{activeGuide.title}</strong>
+            {t.guide.activeGuideBadge}: <strong>{activeGuide.title}</strong>
           </span>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation"
           >
-            Concluído
+            {t.common.done}
           </button>
         </div>
       </div>

@@ -10,7 +10,7 @@ type CompleteWeekModalProps = {
 }
 
 export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
-  const { activeWeek, completeWeek, isGeneratingAI } = useStore()
+  const { activeWeek, completeWeek, isGeneratingAI, locale, t } = useStore()
 
   if (!isOpen || !activeWeek) return null
 
@@ -51,13 +51,13 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
               <CheckCircle2 className="size-5" aria-hidden="true" />
             </div>
             <h3 id="complete-week-title" className="font-serif text-lg font-semibold text-foreground">
-              Completar Semana
+              {t.review.formalCompletionTitle}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar"
+            aria-label={t.common.close}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
           >
             <X className="size-4" aria-hidden="true" />
@@ -67,15 +67,14 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
         {/* Content & Snapshot Summary */}
         <div className="space-y-3">
           <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
-            Você está concluindo formalmente a <strong className="text-foreground">{activeWeek.title}</strong>.
-            Esta ação registrará o estado atual das suas tarefas e gerará uma análise inteligente com Gemini AI.
+            {t.review.concludingNoticePrefix} &quot;{activeWeek.title}&quot;. {t.review.concludingNoticeSuffix}
           </p>
 
           {/* Progress Card Snapshot */}
           <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-foreground">Resumo de Execução:</span>
-              <span className="text-primary font-mono">{percentage}% concluído</span>
+              <span className="text-foreground">{t.review.snapshotTitle}:</span>
+              <span className="text-primary font-mono">{percentage}% {t.common.completed}</span>
             </div>
 
             <div className="w-full bg-secondary rounded-full h-2 overflow-hidden border border-border/50">
@@ -86,15 +85,15 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
             </div>
 
             <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground pt-1">
-              <span>Tarefas contáveis ativas:</span>
+              <span>{t.review.activeCountableTasks}</span>
               <span className="font-medium text-foreground">
-                {completedTasks} de {totalTasks} ({percentage}%)
+                {completedTasks} {t.common.of} {totalTasks} ({percentage}%)
               </span>
             </div>
           </div>
 
           <p className="text-[0.75rem] italic text-muted-foreground/90">
-            Nota: Não é necessário atingir 100% para concluir a semana. O foco é a constância e o aprendizado progressivo.
+            {t.review.completionProgressPhilosophy}
           </p>
         </div>
 
@@ -106,7 +105,7 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
             disabled={isGeneratingAI}
             className="rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation disabled:opacity-50"
           >
-            Cancelar
+            {t.common.cancel}
           </button>
           <button
             type="button"
@@ -115,7 +114,7 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
             className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation disabled:opacity-50"
           >
             <Sparkles className="size-4" aria-hidden="true" />
-            <span>Confirmar e Concluir</span>
+            <span>{t.common.confirm}</span>
           </button>
         </div>
       </div>

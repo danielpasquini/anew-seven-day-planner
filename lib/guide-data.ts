@@ -25,7 +25,7 @@ export type Block =
       rows: { id: string; day: string; tasks: [string, string, string] }[]
     }
 
-export type Verse = { ref: string; ara: string; nvt: string }
+export type Verse = { ref: string; ara: string; nvt: string; kjv?: string; niv?: string }
 
 export type Scripture = {
   verses: Verse[]
@@ -50,6 +50,8 @@ export const intro = {
     ref: `Salmos 27:13-14`,
     ara: `Eu creio que verei a bondade do SENHOR na terra dos viventes. Espera pelo SENHOR, tem bom ânimo, e fortifique-se o teu coração; espera, pois, pelo SENHOR.`,
     nvt: `Ainda assim, confio que verei a bondade do SENHOR enquanto estiver aqui, na terra dos vivos. Espere pelo SENHOR e seja valente e corajoso; sim, espere pelo SENHOR.`,
+    kjv: `I had fainted, unless I had believed to see the goodness of the LORD in the land of the living. Wait on the LORD: be of good courage, and he shall strengthen thine heart: wait, I say, on the LORD.`,
+    niv: `I remain confident of this: I will see the goodness of the LORD in the land of the living. Wait for the LORD; be strong and take heart and wait for the LORD.`,
   },
 }
 
@@ -1170,6 +1172,9 @@ export type CompletionConfig = {
   theologyReviewEnabled: boolean
 }
 
+export type WeeklyPlanItem = ScheduleActivityItem
+export type QuickSheetItem = { id: string; title: string; summary: string }
+
 export type GuideTemplate = {
   id: string
   title: string
@@ -1178,6 +1183,11 @@ export type GuideTemplate = {
   createdAt: string
   updatedAt: string
   schemaVersion: number
+  contentLocale?: "pt-BR" | "en-US"
+  theologyEnabled: boolean
+  bibleVersion?: "ARA" | "NVT" | "KJV" | "NIV" | null
+  profileSummary?: string
+  safetyNotes?: string[]
   config: {
     targetAudience?: string
     category?: string
@@ -1186,8 +1196,7 @@ export type GuideTemplate = {
   sections: Section[]
   scheduleTaskIds: string[]
   weeklyPlan: ScheduleActivityItem[]
-  quickSheets?: { id: string; title: string; summary: string }[]
-  theologyEnabled: boolean
+  quickSheets?: QuickSheetItem[]
   completionConfig: CompletionConfig
 }
 
@@ -1199,6 +1208,7 @@ export const DEFAULT_GUIDE_TEMPLATE: GuideTemplate = {
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-08-13T00:00:00.000Z",
   schemaVersion: 1,
+  contentLocale: "pt-BR",
   config: {
     targetAudience: "Pessoas em busca de clareza, constância e reestruturação pessoal",
     category: "Retomada & Esquemas",
@@ -1244,6 +1254,7 @@ export const DEFAULT_GUIDE_TEMPLATE: GuideTemplate = {
   },
 }
 
-export const GUIDE_TEMPLATES: GuideTemplate[] = [DEFAULT_GUIDE_TEMPLATE]
+import { DEFAULT_GUIDE_TEMPLATE_EN } from "./guide-data-en"
+export { DEFAULT_GUIDE_TEMPLATE_EN }
 
-
+export const GUIDE_TEMPLATES: GuideTemplate[] = [DEFAULT_GUIDE_TEMPLATE, DEFAULT_GUIDE_TEMPLATE_EN]

@@ -31,6 +31,7 @@ import {
 } from "@/lib/store"
 import {
   formatDateRangeBR,
+  formatDateRangeLocale,
   getTodayFormatted,
   getWeekDays,
 } from "@/lib/date-utils"
@@ -46,6 +47,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   const {
     weeks,
     activeWeek,
+    activeGuide,
     selectWeek,
     createWeek,
     deleteWeek,
@@ -53,6 +55,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     setTheme,
     palette,
     setPalette,
+    locale,
+    setLocale,
+    bibleVersion,
+    setBibleVersion,
+    t,
     exportToMarkdown,
     exportWeekJSON,
     exportToJSON,
@@ -201,24 +208,21 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
-        {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="size-5 text-primary shrink-0" aria-hidden="true" />
-            <div>
-              <h2 id="settings-modal-title" className="font-serif text-base sm:text-lg font-semibold text-foreground truncate">
-                Configurações do Aplicativo
-              </h2>
-              <p className="text-xs text-muted-foreground hidden sm:block">
-                Gerencie semanas, horários, estilo e backup de forma centralizada.
-              </p>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Palette className="size-4" aria-hidden="true" />
             </div>
+            <h3 className="font-serif text-lg font-semibold text-foreground">
+              {t.settings.title}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation min-w-[2.5rem] min-h-[2.5rem] flex items-center justify-center"
-            aria-label="Fechar configurações"
+            className="rounded-lg p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition touch-manipulation"
+            aria-label={t.common.close}
           >
             <X className="size-5" aria-hidden="true" />
           </button>
@@ -242,7 +246,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               )}
             >
               <Calendar className="size-4 shrink-0" aria-hidden="true" />
-              <span>1. Semanas</span>
+              <span>{t.settings.tabs.weeks}</span>
               <span className="ml-auto text-[0.65rem] font-medium hidden md:inline">
                 ({weeks.length})
               </span>
@@ -259,7 +263,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               )}
             >
               <Clock className="size-4 shrink-0" aria-hidden="true" />
-              <span>2. Programação</span>
+              <span>{t.settings.tabs.schedule}</span>
             </button>
 
             <button
@@ -273,7 +277,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               )}
             >
               <Palette className="size-4 shrink-0" aria-hidden="true" />
-              <span>3. Aparência</span>
+              <span>{t.settings.tabs.appearance}</span>
             </button>
 
             <button
@@ -287,7 +291,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               )}
             >
               <Download className="size-4 shrink-0" aria-hidden="true" />
-              <span>4. Exportação</span>
+              <span>{t.settings.tabs.export}</span>
             </button>
           </nav>
 
@@ -298,26 +302,26 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               <div className="space-y-6">
                 <div>
                   <h3 className="font-serif text-base font-semibold text-foreground">
-                    Gerenciador de Semanas
+                    {t.settings.semanasTab.title}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Crie novas semanas, selecione a semana ativa para acompanhamento ou exclua históricos antigos.
+                    {t.settings.semanasTab.desc}
                   </p>
                 </div>
 
                 {/* Form: Criar Nova Semana */}
                 <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
-                    + Criar Nova Semana
+                    {t.settings.semanasTab.newWeekBtn}
                   </h4>
                   <form onSubmit={handleCreateWeek} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-5 space-y-1">
                       <label className="text-xs font-medium text-foreground block">
-                        Nome da Semana
+                        {t.week.titleLabel}
                       </label>
                       <input
                         type="text"
-                        placeholder={`Ex: Semana ${weeks.length + 1}`}
+                        placeholder={`Ex: ${t.week.weekNumberLabel} ${weeks.length + 1}`}
                         value={newWeekTitle}
                         onChange={(e) => setNewWeekTitle(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
@@ -327,7 +331,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                     <div className="sm:col-span-4 space-y-1">
                       <label className="text-xs font-medium text-foreground block">
-                        Data de Início
+                        {t.week.startDateLabel}
                       </label>
                       <input
                         type="date"
@@ -344,7 +348,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Plus className="size-4" aria-hidden="true" />
-                        <span>Criar Semana</span>
+                        <span>{t.common.create}</span>
                       </button>
                     </div>
                   </form>
@@ -357,10 +361,10 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
                       <div>
                         <h4 className="text-sm font-semibold text-destructive">
-                          Confirmar exclusão da &quot;{deletingWeek.title}&quot;?
+                          {t.settings.semanasTab.confirmDeletePrefix} &quot;{deletingWeek.title}&quot;?
                         </h4>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Esta ação excluirá permanentemente os registros e respostas gravados para esta semana ({formatDateRangeBR(deletingWeek.startDate, deletingWeek.endDate)}).
+                          {t.week.deleteDesc} ({formatDateRangeLocale(deletingWeek.startDate, deletingWeek.endDate, locale)}).
                         </p>
                       </div>
                     </div>
@@ -370,14 +374,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         onClick={() => setDeletingWeek(null)}
                         className="rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground hover:bg-accent transition touch-manipulation"
                       >
-                        Cancelar
+                        {t.common.cancel}
                       </button>
                       <button
                         type="button"
                         onClick={handleConfirmDeleteWeek}
                         className="rounded-md bg-destructive px-3 py-2 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90 transition shadow-xs touch-manipulation"
                       >
-                        Sim, Excluir Semana
+                        {t.week.deleteConfirm}
                       </button>
                     </div>
                   </div>
@@ -386,13 +390,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* List of Existing Weeks */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Semanas Cadastradas ({weeks.length})
+                    {t.nav.weeks} ({weeks.length})
                   </h4>
 
                   <div className="grid grid-cols-1 gap-2.5">
                     {weeks.map((w) => {
                       const isActive = w.id === activeWeek?.id
-                      const rangeStr = formatDateRangeBR(w.startDate, w.endDate)
+                      const rangeStr = formatDateRangeLocale(w.startDate, w.endDate, locale)
 
                       return (
                         <div
@@ -411,12 +415,12 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                               </span>
                               {isActive && (
                                 <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[0.65rem] font-bold">
-                                  Semana Ativa
+                                  {t.common.active}
                                 </span>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              Período: <span className="font-medium text-foreground">{rangeStr}</span>
+                              {t.common.period} <span className="font-medium text-foreground">{rangeStr}</span>
                             </p>
                             <div className="flex items-center gap-2 pt-1 flex-wrap">
                               <div className="w-28 sm:w-32 bg-secondary rounded-full h-1.5 overflow-hidden">
@@ -426,7 +430,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 />
                               </div>
                               <span className="text-[0.7rem] font-medium text-muted-foreground">
-                                {w.progresso.concluidas}/{w.progresso.total} tarefas ({w.progresso.percentual}%)
+                                {w.progresso.concluidas}/{w.progresso.total} {t.common.tasks} ({w.progresso.percentual}%)
                               </span>
                             </div>
                           </div>
@@ -438,7 +442,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 onClick={() => selectWeek(w.id)}
                                 className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation min-h-[2.25rem]"
                               >
-                                Ativar Esta
+                                {t.common.activate}
                               </button>
                             )}
 
@@ -447,8 +451,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 type="button"
                                 onClick={() => setDeletingWeek(w)}
                                 className="rounded-md border border-border p-2 text-muted-foreground hover:border-destructive hover:text-destructive hover:bg-destructive/10 transition touch-manipulation min-w-[2.25rem] min-h-[2.25rem] flex items-center justify-center"
-                                title="Excluir semana"
-                                aria-label={`Excluir ${w.title}`}
+                                title={t.common.delete}
+                                aria-label={`${t.common.delete} ${w.title}`}
                               >
                                 <Trash2 className="size-4" aria-hidden="true" />
                               </button>
@@ -572,14 +576,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                   value={editActTime}
                                   onChange={(e) => setEditActTime(e.target.value)}
                                   className="sm:col-span-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
-                                  placeholder="Horário"
+                                  placeholder={t.schedule.timeLabel}
                                 />
                                 <input
                                   type="text"
                                   value={editActDesc}
                                   onChange={(e) => setEditActDesc(e.target.value)}
                                   className="sm:col-span-7 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
-                                  placeholder="Descrição"
+                                  placeholder={t.schedule.descLabel}
                                 />
                                 <div className="sm:col-span-2 flex items-center gap-1">
                                   <button
@@ -587,13 +591,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                     onClick={() => handleSaveEdit(act.id)}
                                     className="flex-1 rounded bg-primary py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 touch-manipulation"
                                   >
-                                    Salvar
+                                    {t.common.save}
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setEditingActId(null)}
                                     className="rounded border border-border p-2 text-xs text-muted-foreground hover:bg-accent touch-manipulation"
-                                    aria-label="Cancelar edição"
+                                    aria-label={t.common.cancel}
                                   >
                                     <X className="size-4" aria-hidden="true" />
                                   </button>
@@ -623,8 +627,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 onClick={() => moveScheduleActivity(act.id, "up")}
                                 disabled={index === 0}
                                 className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition touch-manipulation"
-                                title="Mover para cima"
-                                aria-label="Mover para cima"
+                                title={t.schedule.orderUp}
+                                aria-label={t.schedule.orderUp}
                               >
                                 <ArrowUp className="size-4" aria-hidden="true" />
                               </button>
@@ -633,8 +637,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 onClick={() => moveScheduleActivity(act.id, "down")}
                                 disabled={index === dayActivities.length - 1}
                                 className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition touch-manipulation"
-                                title="Mover para baixo"
-                                aria-label="Mover para baixo"
+                                title={t.schedule.orderDown}
+                                aria-label={t.schedule.orderDown}
                               >
                                 <ArrowDown className="size-4" aria-hidden="true" />
                               </button>
@@ -643,8 +647,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 type="button"
                                 onClick={() => handleStartEdit(act.id, act.time, act.description)}
                                 className="p-1.5 text-muted-foreground hover:text-primary transition touch-manipulation"
-                                title="Editar atividade"
-                                aria-label={`Editar: ${act.description}`}
+                                title={t.settings.programacaoTab.editActivityTitle}
+                                aria-label={`${t.settings.programacaoTab.editActivityTitle}: ${act.description}`}
                               >
                                 <Edit2 className="size-4" aria-hidden="true" />
                               </button>
@@ -653,8 +657,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 type="button"
                                 onClick={() => deleteScheduleActivity(act.id)}
                                 className="p-1.5 text-muted-foreground hover:text-destructive transition touch-manipulation"
-                                title="Excluir atividade"
-                                aria-label={`Excluir: ${act.description}`}
+                                title={t.settings.programacaoTab.deleteActivityTitle}
+                                aria-label={`${t.settings.programacaoTab.deleteActivityTitle}: ${act.description}`}
                               >
                                 <Trash2 className="size-4" aria-hidden="true" />
                               </button>
@@ -668,22 +672,151 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               </div>
             )}
 
-            {/* TAB 3: APARÊNCIA */}
+            {/* TAB 3: APARÊNCIA & IDIOMA */}
             {activeTab === "aparencia" && (
               <div className="space-y-6">
-                <div>
-                  <h3 className="font-serif text-base font-semibold text-foreground">
-                    Aparência e Personalização
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Escolha o modo de cor e a paleta tonal ideal para sua leitura e acompanhamento.
-                  </p>
+                {/* Idioma da Interface */}
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {t.settings.language.label}
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t.settings.language.desc}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setLocale("pt-BR")}
+                      className={cn(
+                        "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                        locale === "pt-BR"
+                          ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                          : "border-border bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-base leading-none">🇧🇷</span>
+                        <span className="text-xs font-semibold text-foreground">Português (Brasil)</span>
+                      </div>
+                      {locale === "pt-BR" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setLocale("en-US")}
+                      className={cn(
+                        "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                        locale === "en-US"
+                          ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                          : "border-border bg-card hover:border-primary/40"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-base leading-none">🇺🇸</span>
+                        <span className="text-xs font-semibold text-foreground">English (US)</span>
+                      </div>
+                      {locale === "en-US" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Modo de Tema */}
-                <div className="space-y-3">
+                {/* Versão Bíblica Padrão (quando teologia estiver ativada) */}
+                {activeGuide.theologyEnabled && (
+                  <div className="space-y-3 pt-4 border-t border-border">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        {t.settings.bibleVersion.label}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t.settings.bibleVersion.desc}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {locale === "en-US" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setBibleVersion("KJV")}
+                            className={cn(
+                              "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                              bibleVersion === "KJV"
+                                ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                                : "border-border bg-card hover:border-primary/40"
+                            )}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">King James Version (KJV)</p>
+                              <p className="text-[0.7rem] text-muted-foreground">Classic canonical translation</p>
+                            </div>
+                            {bibleVersion === "KJV" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setBibleVersion("NIV")}
+                            className={cn(
+                              "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                              bibleVersion === "NIV"
+                                ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                                : "border-border bg-card hover:border-primary/40"
+                            )}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">New International Version (NIV)</p>
+                              <p className="text-[0.7rem] text-muted-foreground">Modern readable translation</p>
+                            </div>
+                            {bibleVersion === "NIV" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setBibleVersion("ARA")}
+                            className={cn(
+                              "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                              bibleVersion === "ARA"
+                                ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                                : "border-border bg-card hover:border-primary/40"
+                            )}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Almeida Revista e Atualizada (ARA)</p>
+                              <p className="text-[0.7rem] text-muted-foreground">Tradução clássica de referência</p>
+                            </div>
+                            {bibleVersion === "ARA" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setBibleVersion("NVT")}
+                            className={cn(
+                              "flex items-center justify-between rounded-xl border p-3.5 transition text-left touch-manipulation",
+                              bibleVersion === "NVT"
+                                ? "border-primary bg-primary/8 shadow-xs ring-1 ring-primary/30"
+                                : "border-border bg-card hover:border-primary/40"
+                            )}
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Nova Versão Transformadora (NVT)</p>
+                              <p className="text-[0.7rem] text-muted-foreground">Linguagem contemporânea e clara</p>
+                            </div>
+                            {bibleVersion === "NVT" && <Check className="size-4 text-primary" aria-hidden="true" />}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tema */}
+                <div className="space-y-3 pt-4 border-t border-border">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Modo de Exibição
+                    {t.settings.theme.label}
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -700,10 +833,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <Sun className="size-5 text-amber-500 shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-foreground">Claro</span>
+                          <span className="text-xs font-semibold text-foreground">{t.settings.theme.light}</span>
                           {theme === "light" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
-                        <p className="text-[0.7rem] text-muted-foreground">Fundo papel aquecido</p>
                       </div>
                     </button>
 
@@ -720,10 +852,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <Moon className="size-5 text-indigo-400 shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-foreground">Escuro</span>
+                          <span className="text-xs font-semibold text-foreground">{t.settings.theme.dark}</span>
                           {theme === "dark" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
-                        <p className="text-[0.7rem] text-muted-foreground">Confortável para a noite</p>
                       </div>
                     </button>
 
@@ -740,19 +871,18 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <Monitor className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-foreground">Sistema</span>
+                          <span className="text-xs font-semibold text-foreground">{t.settings.theme.system}</span>
                           {theme === "system" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
                         </div>
-                        <p className="text-[0.7rem] text-muted-foreground">Segue o seu dispositivo</p>
                       </div>
                     </button>
                   </div>
                 </div>
 
                 {/* Paleta de Cores */}
-                <div className="space-y-3 pt-2 border-t border-border">
+                <div className="space-y-3 pt-4 border-t border-border">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Paletas de Cores Editoriais
+                    {t.settings.palette.label}
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -869,7 +999,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         onClick={() => setPendingImport(null)}
                         className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
                       >
-                        Cancelar
+                        {t.common.cancel}
                       </button>
                     </div>
                   </div>
@@ -890,7 +1020,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       type="button"
                       onClick={() => setImportStatus(null)}
                       className="p-1 text-muted-foreground hover:text-foreground"
-                      aria-label="Fechar mensagem"
+                      aria-label={t.common.close}
                     >
                       <X className="size-3.5" aria-hidden="true" />
                     </button>
@@ -900,10 +1030,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* ── SECTION A: EXPORTAR SEMANA ATUAL ── */}
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-serif text-base font-semibold text-foreground">Exportar Semana Atual</h3>
+                    <h3 className="font-serif text-base font-semibold text-foreground">{t.settings.exportTab.currentWeekTitle}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Exporta apenas a semana em exibição ({activeWeek?.title ?? "—"})
-                      com programação, respostas, progresso e análise do Gemini (quando disponível).
+                      {t.settings.exportTab.currentWeekDesc}
                     </p>
                   </div>
 
@@ -915,9 +1044,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           <Printer className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">Imprimir ou Salvar em PDF</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportPdf}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Abre a impressão do navegador formatada em A4 sem menus, botões ou sidebar.
+                            {t.settings.exportTab.pdfDesc}
                           </p>
                         </div>
                       </div>
@@ -927,7 +1056,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <Printer className="size-4" aria-hidden="true" />
-                        <span>Imprimir / Salvar PDF</span>
+                        <span>{t.export.printPdf}</span>
                       </button>
                     </div>
 
@@ -938,9 +1067,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           <FileText className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">Exportar como Markdown (.md)</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportToMarkdown}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Documento estruturado e legível com todo o conteúdo da semana: metas, respostas e veredito.
+                            {t.settings.exportTab.markdownDesc}
                           </p>
                         </div>
                       </div>
@@ -950,7 +1079,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <FileText className="size-4" aria-hidden="true" />
-                        <span>Baixar Markdown (.md)</span>
+                        <span>{t.export.downloadMarkdown}</span>
                       </button>
                     </div>
 
@@ -961,9 +1090,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           <FileJson className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">Exportar Semana como JSON</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportWeekJson}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            JSON estruturado com schedule, responses, tasks, progress, completionSnapshot e aiReview.
+                            {t.settings.exportTab.weekJsonDesc}
                           </p>
                         </div>
                       </div>
@@ -973,7 +1102,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <FileJson className="size-4" aria-hidden="true" />
-                        <span>Baixar Semana (.json)</span>
+                        <span>{t.export.downloadJson}</span>
                       </button>
                     </div>
                   </div>
@@ -985,10 +1114,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* ── SECTION B: BACKUP COMPLETO ── */}
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-serif text-base font-semibold text-foreground">Backup Completo</h3>
+                    <h3 className="font-serif text-base font-semibold text-foreground">{t.settings.exportTab.backupTitle}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Todas as {weeks.length} {weeks.length === 1 ? "semana" : "semanas"} + preferências de tema e paleta.
-                      Não inclui API keys ou credenciais.
+                      {t.settings.exportTab.backupDesc}
                     </p>
                   </div>
 
@@ -998,9 +1126,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         <Database className="size-5" aria-hidden="true" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-foreground">Backup Completo (.json)</h4>
+                        <h4 className="text-sm font-semibold text-foreground">{t.export.backupJson}</h4>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Arquivo de backup com todas as semanas. Use para transferir dados entre dispositivos ou navegadores.
+                          {t.settings.exportTab.backupFullDesc}
                         </p>
                       </div>
                     </div>
@@ -1012,7 +1140,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Download className="size-4" aria-hidden="true" />
-                        <span>Baixar Backup (.json)</span>
+                        <span>{t.settings.exportTab.downloadBackup}</span>
                       </button>
 
                       <input
@@ -1029,7 +1157,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/80 transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Upload className="size-4" aria-hidden="true" />
-                        <span>Restaurar Backup</span>
+                        <span>{t.settings.exportTab.restoreBackup}</span>
                       </button>
                     </div>
                   </div>
@@ -1043,14 +1171,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
         {/* Modal Footer */}
         <div className="flex items-center justify-between border-t border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
           <span className="text-xs text-muted-foreground truncate max-w-[60%]">
-            {activeWeek ? `Semana em exibição: ${activeWeek.title}` : ""}
+            {activeWeek ? `${t.settings.activeWeekLabel} ${activeWeek.title}` : ""}
           </span>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.25rem]"
           >
-            Concluído
+            {t.common.done}
           </button>
         </div>
       </div>
