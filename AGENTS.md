@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Anew review cadence
 
+Before presenting a completed task, apply the ten checks and verification gate in [SKILL.md](SKILL.md), including the first-pass failure threshold and evidence report.
+
 Apply this workflow across the project. After every five coherent changes, run an integrated review of the affected flows and their neighboring screens before starting another batch. Review each change individually as well; fix defects as soon as they are found.
 
 - English is the primary language. Check default screens, loading/empty/error states, labels, dialogs and mobile routes for accidental Portuguese, inconsistent capitalization, spelling and brand naming. Explicitly selected language preferences are separate from unintended translation fallbacks.

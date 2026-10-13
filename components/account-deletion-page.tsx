@@ -6,7 +6,7 @@ import { AccountDeletion, AccountDeletionNotice } from "@/components/account-del
 import { isNativePlatform } from "@/lib/platform"
 
 function DeletionAccess() {
-  const { user, configured, status, busy, signIn, signInGoogleForDeletion, resetPassword, error } = useAuth()
+  const { user, configured, googleConfigured, status, busy, signIn, signInGoogleForDeletion, resetPassword, error } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState("")
@@ -24,7 +24,7 @@ function DeletionAccess() {
       <label className="block text-sm font-medium">Email<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} disabled={!configured || busy} maxLength={254} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-base" /></label>
       <label className="block text-sm font-medium">Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} disabled={!configured || busy} maxLength={128} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-base" /></label>
       <button type="submit" disabled={!configured || busy} className="min-h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-40">Sign In to Manage Deletion</button>
-      {!isNativePlatform() && <button type="button" disabled={!configured || busy} onClick={async () => { setMessage(""); try { await signInGoogleForDeletion() } catch {} }} className="block min-h-11 rounded-xl border border-border px-5 text-sm font-semibold disabled:opacity-40">Use an Existing Google Account</button>}
+      {!isNativePlatform() && <button type="button" disabled={!googleConfigured || busy} onClick={async () => { setMessage(""); try { await signInGoogleForDeletion() } catch {} }} className="block min-h-11 rounded-xl border border-border px-5 text-sm font-semibold disabled:opacity-40">Use an Existing Google Account</button>}
       <button type="button" disabled={!configured || busy || !email} onClick={async () => { try { await resetPassword(email); setMessage("If this address can receive recovery messages, check your inbox and spam folder.") } catch {} }} className="block min-h-11 text-sm text-primary underline">Request Password Recovery</button>
     </form>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

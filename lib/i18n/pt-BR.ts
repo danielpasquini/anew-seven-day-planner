@@ -147,7 +147,7 @@ export const ptBR: TranslationDictionary = {
     weekNumberLabel: "Semana",
     weekSingular: "semana",
     weekPlural: "semanas",
-    historyTitle: "Histórico de Semanas do Guia",
+    historyTitle: "Histórico de Semanas",
   },
   schedule: {
     title: "Programação Semanal de Atividades",

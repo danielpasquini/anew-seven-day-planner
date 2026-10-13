@@ -1,0 +1,36 @@
+{
+  "origin": "http://localhost:3001",
+  "rows": [
+    {
+      "path": "/",
+      "status": 200
+    },
+    {
+      "path": "/termos",
+      "status": 200
+    },
+    {
+      "path": "/privacidade",
+      "status": 200
+    },
+    {
+      "path": "/delete-account",
+      "status": 200
+    },
+    {
+      "path": "/test",
+      "status": 200
+    },
+    {
+      "path": "/api/ai-status",
+      "status": 200,
+      "body": {
+        "available": true,
+        "provider": "Google Gemini",
+        "consentRequired": true,
+        "accountRequired": true,
+        "authConfigured": true
+      }
+    }
+  ]
+}

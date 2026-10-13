@@ -1,4 +1,5 @@
 import { GUIDE_TEMPLATES, type Block, type GuideTemplate, type Section } from "./guide-data"
+import { isValidWeekSetup } from "./week-setup"
 
 type ObjectValue = Record<string, unknown>
 type BackupObject = ObjectValue & {
@@ -82,6 +83,7 @@ const week = (v: unknown) => {
   if (["guideId", "templateId"].some((key) => v[key] !== undefined && !id(v[key]))) return false
   if (v.guideVersion !== undefined && !positiveInteger(v.guideVersion)) return false
   if (v.status !== undefined && v.status !== "active" && v.status !== "completed") return false
+  if (v.setup !== undefined && !isValidWeekSetup(v.setup)) return false
   if (!object(v.data) || !recordOf(v.data.text, (text) => string(text, 100000)) || !recordOf(v.data.done, (done) => typeof done === "boolean")) return false
   if (v.programacao !== undefined && (!object(v.programacao) || !arrayOf(v.programacao.activities, activity) || !uniqueIds(v.programacao.activities as unknown[]))) return false
   if (v.guideSnapshot !== undefined && v.guideSnapshot !== null && (!object(v.guideSnapshot) || !id(v.guideSnapshot.id) || !string(v.guideSnapshot.title, 300) || !positiveInteger(v.guideSnapshot.version) || !completionConfig(v.guideSnapshot.completionConfig) || !optionalBoolean(v.guideSnapshot.theologyEnabled) || !validLocale(v.guideSnapshot.contentLocale) || !validBibleVersion(v.guideSnapshot.bibleVersion))) return false

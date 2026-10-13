@@ -9,10 +9,10 @@ const STEPS = [
   { title: "Customize Your Sections", copy: "Optional sections stay folded until you want them. Customize Sections lets you rename, reorder, add, or remove sections and choose your own field labels and types.", tip: "Keeping just one notes section is enough." },
   { title: "Choose Your Extras", copy: "Optional AI can suggest fields and a weekly plan when the service is available and you consent. Resources, privacy, and other tools live under More. Sounds and spiritual content are optional.", tip: "You can replay this tutorial from Help whenever you want." },
 ]
-let demoSeen = false
+const seenDemoSessions = new Set<number>()
 
-export function NativePlannerTutorial({ owner, enabled, replay }: { owner: string; enabled: boolean; replay: number }) {
-  const [visible, setVisible] = useState(replay > 0 || (owner === "demo" && !demoSeen)), [step, setStep] = useState(0)
+export function NativePlannerTutorial({ owner, enabled, replay, autoStart = true, demoSession = 0 }: { owner: string; enabled: boolean; replay: number; autoStart?: boolean; demoSession?: number }) {
+  const [visible, setVisible] = useState(replay > 0 || (owner === "demo" && autoStart && !seenDemoSessions.has(demoSession))), [step, setStep] = useState(0)
   useEffect(() => {
     if (!enabled) return
     let active = true
@@ -21,7 +21,7 @@ export function NativePlannerTutorial({ owner, enabled, replay }: { owner: strin
   }, [owner, enabled])
   const close = () => {
     setVisible(false)
-    if (owner === "demo") demoSeen = true
+    if (owner === "demo") seenDemoSessions.add(demoSession)
     else void AsyncStorage.setItem(`anew-native-planner-tutorial-v1:${owner}`, "seen").catch(() => {})
   }
   const current = STEPS[step]

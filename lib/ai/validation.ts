@@ -117,6 +117,6 @@ export function checkOutputSafety(value: unknown, spiritualityEnabled: boolean) 
   const diagnosticClaim = /(?:voc[eê] tem|voc[eê] sofre de|seu diagn[oó]stico [eé]|you have|your diagnosis is)\s+(?:um |uma |an? )?(?:transtorno|depress[aã]o|bipolaridade|esquizofrenia|autismo|TDAH|PTSD|ADHD|bipolar disorder|schizophrenia|(?:major )?depression|anxiety disorder|autism)/i
   const religiousContent = /\b(?:ora[cç][aã]o|salmos?|b[ií]blia|escritura sagrada|Jesus|Deus|pecado|religios[oa]s?|espiritualidade|igreja|prayer|psalms?|bible|scripture|God|sin|religious|religion|spirituality|church|Allah|Alcor[aã]o|Quran|Torah|Buddha)\b/i
   if (diagnosticClaim.test(text) || (!spiritualityEnabled && religiousContent.test(text))) {
-    throw new AIRequestError(502, "The AI response did not respect this guide's preferences or safety limits. Please try again.", "UNSAFE_AI_OUTPUT")
+    throw new AIRequestError(502, "The AI response did not respect this week's preferences or safety limits. Please try again.", "UNSAFE_AI_OUTPUT")
   }
 }

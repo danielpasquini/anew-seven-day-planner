@@ -10,9 +10,9 @@ Anew is a calm seven-day planner for adults in Brazil and the United States: **S
 | Opening | Skippable 9.2-second first branch growth, 1.4-second returning leaf; reduced motion and opt-in sounds |
 | Introduction | Immediate week preview; ten personalization questions only if chosen; no AI required |
 | Guest | Compact read-only seven-day plan; notes folded; resources secondary under More |
-| First Dashboard | Skippable five-step tutorial, replayable from Help/More; starter accepted with Use This Week |
-| Presets | Gentle Start, Everyday Balance, One Personal Goal, Blank Week; deterministic and local |
-| Customization | Custom section titles and fields, add/remove/reorder; stable IDs and historical section snapshots |
+| First Dashboard | Web tour attached to available controls, skippable and replayable from Quick Tour/More; starter accepted with Use This Week |
+| Presets | Eight local patterns from Rest Week to More Active Week, plus Blank Week; voluntary pacing |
+| Customization | Weeks-only creation; prior setup/preferences and daily notes copied independently, completion reset; folded choices with Other text; optional Gemini setup suggestions exclude daily notes |
 | Test access | Shared public example login on all three platforms; explicit flags; memory-only records |
 | Resources | 25 English institutional resources; search, categories, publisher regions and favorites |
 | Psychology | Plural perspectives without ranking; spirituality optional and off |

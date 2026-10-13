@@ -38,6 +38,10 @@ const { createDemoBackup, MemoryDemoStorage, DemoSessionController } = loadSourc
 const nativeWorkspace = loadSource(path.join(root, "native/src/workspace.ts"))
 const testAccess = loadSource(path.join(root, "lib/test-access.ts"))
 const planner = loadSource(path.join(root, "lib/planner.ts"))
+const guideRevision = loadSource(path.join(root, "lib/guide-revision.ts"))
+const weekPlanning = loadSource(path.join(root, "lib/week-planning.ts"))
+const weekSetup = loadSource(path.join(root, "lib/week-setup.ts"))
+const weekOptions = loadSource(path.join(root, "lib/week-options.ts"))
 const nativeAI = loadSource(path.join(root, "native/src/ai.ts"))
 const { titleCase } = loadSource(path.join(root, "lib/title-case.ts"))
 const clone = (value) => JSON.parse(JSON.stringify(value))
@@ -643,13 +647,183 @@ test("optional scripture uses the selected language even when a legacy translati
 })
 
 test("demo remains unavailable without its explicit feature gate", () => {
-  const controller = new DemoSessionController(false)
+  let entryGuardCalls = 0
+  const controller = new DemoSessionController(false, () => { entryGuardCalls += 1; return true })
   assert.equal(controller.available, false)
   assert.equal(controller.start(), null)
   assert.equal(controller.start(onboarding.buildPersonalizedGuide({ activity: "move" })), null)
+  assert.equal(controller.start(undefined, "first-visit"), null)
+  assert.equal(controller.start(undefined, "returning-user"), null)
   assert.equal(controller.reset(), null)
   controller.exit()
   assert.equal(controller.session, null)
+  assert.equal(entryGuardCalls, 0)
+})
+
+test("test entry waits for real pending account saves and rechecks only after leaving a test session", () => {
+  const accountKey = "guia-retomada-v2:fixture-test-entry-account"
+  const accountStorage = memoryStorage([[accountKey, "fixture-preserved-original"]])
+  const engine = new SyncEngine()
+  let storageBlocked = true
+  let entryGuardCalls = 0
+  const controller = new DemoSessionController(true, () => {
+    entryGuardCalls += 1
+    return engine.flushLocalPersist()
+  })
+  const latest = payload()
+  latest.weeks[0].data.text["fixture-latest-account-note"] = "fixture-pending-account-edit"
+  try {
+    engine.scheduleSync(latest, (value) => {
+      if (storageBlocked) throw new Error("fixture-storage-quota")
+      accountStorage.setItem(accountKey, JSON.stringify(value))
+    })
+    assert.equal(controller.start(undefined, "first-visit"), null)
+    assert.equal(controller.session, null)
+    assert.equal(entryGuardCalls, 1)
+    assert.equal(accountStorage.getItem(accountKey), "fixture-preserved-original")
+
+    storageBlocked = false
+    const firstVisit = controller.start(undefined, "first-visit")
+    assert.ok(firstVisit)
+    assert.equal(firstVisit.scenario, "first-visit")
+    assert.equal(entryGuardCalls, 2)
+    assert.equal(JSON.parse(accountStorage.getItem(accountKey)).weeks[0].data.text["fixture-latest-account-note"], "fixture-pending-account-edit")
+    const savedAccountRecord = accountStorage.getItem(accountKey)
+
+    storageBlocked = true
+    engine.scheduleSync(payload(), () => { throw new Error("fixture-guard-must-not-run-inside-demo") })
+    const reset = controller.reset()
+    assert.equal(reset.scenario, "first-visit")
+    assert.notEqual(reset.id, firstVisit.id)
+    const returning = controller.start(undefined, "returning-user")
+    assert.equal(returning.scenario, "returning-user")
+    assert.equal(backup.isValidBackup(JSON.parse(returning.storage.getItem(returning.storageKey))), true)
+    assert.equal(entryGuardCalls, 2)
+    assert.equal(accountStorage.getItem(accountKey), savedAccountRecord)
+    assert.equal(firstVisit.storage.getItem(firstVisit.storageKey), null)
+    assert.equal(reset.storage.getItem(reset.storageKey), null)
+
+    controller.exit()
+    assert.equal(controller.start(undefined, "returning-user"), null)
+    assert.equal(controller.session, null)
+    assert.equal(entryGuardCalls, 3)
+    assert.equal(accountStorage.getItem(accountKey), savedAccountRecord)
+  } finally { engine.dispose(); controller.exit() }
+})
+
+test("first-visit test access starts with no workspace or history while returning access has example records", () => {
+  const controller = new DemoSessionController(true)
+  try {
+    const firstVisit = controller.start(undefined, "first-visit")
+    assert.equal(firstVisit.scenario, "first-visit")
+    assert.equal(firstVisit.storage.getItem(firstVisit.storageKey), null)
+    assert.equal(firstVisit.storage.getItem("guia-locale"), "en-US")
+    assert.equal(firstVisit.storage.getItem("guia-bible-version"), "KJV")
+    assert.equal(firstVisit.storage.getItem("anew-planner-tour:demo:v1"), null)
+
+    const returning = controller.start(undefined, "returning-user")
+    assert.equal(returning.scenario, "returning-user")
+    const records = JSON.parse(returning.storage.getItem(returning.storageKey))
+    assert.equal(backup.isValidBackup(records), true)
+    assert.ok(records.weeks.some((entry) => entry.status === "completed"))
+    assert.ok(records.weeks.some((entry) => Object.keys(entry.data.text).length > 0))
+    assert.equal(returning.storage.getItem("anew-planner-tour:demo:v1"), "seen")
+    assert.equal(firstVisit.storage.getItem("guia-locale"), null)
+  } finally { controller.exit() }
+})
+
+test("resetting first-visit access removes authored records and pending saves while retaining the chosen scenario", () => {
+  const controller = new DemoSessionController(true)
+  const engine = new SyncEngine()
+  try {
+    const firstVisit = controller.start(undefined, "first-visit")
+    firstVisit.storage.setItem(firstVisit.storageKey, JSON.stringify(payload()))
+    firstVisit.storage.setItem("anew-planner-tour:demo:v1", "seen")
+    firstVisit.storage.setItem("guia-novo-draft:demo", "fixture-new-user-draft")
+    firstVisit.storage.setItem("guia-locale", "pt-BR")
+    engine.scheduleSync(payload(), (value) => firstVisit.storage.setItem(firstVisit.storageKey, JSON.stringify(value)))
+
+    const reset = controller.reset()
+    assert.equal(reset.scenario, "first-visit")
+    assert.notEqual(reset.id, firstVisit.id)
+    assert.notEqual(reset.storageKey, firstVisit.storageKey)
+    assert.equal(engine.flushLocalPersist(), true)
+    assert.equal(reset.storage.getItem(reset.storageKey), null)
+    assert.equal(reset.storage.getItem("guia-locale"), "en-US")
+    assert.equal(reset.storage.getItem("anew-planner-tour:demo:v1"), null)
+    assert.equal(reset.storage.getItem("guia-novo-draft:demo"), null)
+    firstVisit.storage.setItem("fixture-late-write", "fixture-discarded")
+    for (const key of [firstVisit.storageKey, "anew-planner-tour:demo:v1", "guia-novo-draft:demo", "fixture-late-write"])
+      assert.equal(firstVisit.storage.getItem(key), null)
+  } finally { engine.dispose(); controller.exit() }
+})
+
+test("returning-user resets preserve their scenario and custom seed without carrying test edits", () => {
+  const guide = onboarding.buildPersonalizedGuide({ activity: "write", support: "trusted" })
+  const original = clone(guide)
+  const controller = new DemoSessionController(true)
+  try {
+    const session = controller.start(guide, "returning-user")
+    const changed = JSON.parse(session.storage.getItem(session.storageKey))
+    changed.weeks[0].data.text["fixture-returning-note"] = "fixture-only-in-old-session"
+    session.storage.setItem(session.storageKey, JSON.stringify(changed))
+    guide.title = "fixture-caller-change"
+
+    const reset = controller.reset()
+    assert.equal(reset.scenario, "returning-user")
+    const records = JSON.parse(reset.storage.getItem(reset.storageKey))
+    assert.equal(backup.isValidBackup(records), true)
+    assert.equal(records.guides[0].title, `Demo: ${original.title}`)
+    assert.equal(JSON.stringify(records).includes("fixture-only-in-old-session"), false)
+    assert.equal(reset.storage.getItem("anew-planner-tour:demo:v1"), "seen")
+    assert.equal(session.storage.getItem(session.storageKey), null)
+  } finally { controller.exit() }
+})
+
+test("switching test scenarios never reads or changes account records, introduction flags or preferences", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage")
+  const existing = [
+    ["guia-retomada-v2:fixture-account-a", "fixture-account-a-records"],
+    ["guia-retomada-v2:fixture-account-b", "fixture-account-b-records"],
+    ["guia-retomada-v2", "fixture-legacy-records"],
+    ["anew-onboarding-guide-v1:fixture-account-a", "fixture-account-a-draft"],
+    ["anew-first-open-v1", "seen"],
+    ["anew-introduction-seen-v1", "seen"],
+    ["anew-planner-tour:fixture-account-a:v1", "seen"],
+    ["guia-theme", "dark"],
+    ["guia-palette", "terracotta"],
+    ["guia-locale", "pt-BR"],
+    ["guia-bible-version", "NVT"],
+    ["anew-gentle-sound", "on"],
+  ]
+  const realValues = new Map(existing)
+  let accountStorageCalls = 0
+  const forbidden = () => { accountStorageCalls += 1; throw new Error("fixture-account-storage-forbidden") }
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: forbidden, setItem: forbidden, removeItem: forbidden, clear: forbidden } })
+  const controller = new DemoSessionController(true)
+  try {
+    const firstVisit = controller.start(undefined, "first-visit")
+    firstVisit.storage.setItem("anew-first-open-v1", "seen")
+    firstVisit.storage.setItem("anew-introduction-seen-v1", "seen")
+    firstVisit.storage.setItem("guia-theme", "light")
+    firstVisit.storage.setItem("anew-gentle-sound", "off")
+    controller.reset()
+    const returning = controller.start(undefined, "returning-user")
+    assert.equal(returning.storage.getItem("guia-theme"), null)
+    assert.equal(returning.storage.getItem("anew-gentle-sound"), null)
+    assert.equal(returning.storage.getItem("guia-locale"), "en-US")
+    const nextFirstVisit = controller.start(undefined, "first-visit")
+    assert.equal(nextFirstVisit.storage.getItem(nextFirstVisit.storageKey), null)
+    assert.equal(returning.storage.getItem(returning.storageKey), null)
+    controller.exit()
+    assert.equal(controller.session, null)
+    assert.equal(accountStorageCalls, 0)
+    assert.deepEqual([...realValues], existing)
+  } finally {
+    controller.exit()
+    if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor)
+    else delete globalThis.localStorage
+  }
 })
 
 test("public test access normalizes only the email and requires the exact demonstration password", () => {
@@ -848,6 +1022,40 @@ test("native blank and demo workspaces are valid English backups and never alias
   const boundaryWeek = nativeWorkspace.blankWeek(guide, "Boundary week", "2028-02-26")
   assert.equal(boundaryWeek.endDate, "2028-03-03")
   assert.throws(() => nativeWorkspace.blankWeek(guide, "Impossible date", "2026-02-30"), /INVALID_WORKSPACE/)
+})
+
+test("native first-visit tests start with one clean week while returning tests include completed sample history", () => {
+  const guide = onboarding.buildPersonalizedGuide({ activity: "move", pace: "small", support: "trusted" })
+  const original = clone(guide)
+  const firstVisit = nativeWorkspace.createNativeDemoWorkspace(guide, "first-visit")
+  assert.equal(backup.isValidBackup(firstVisit), true)
+  assert.equal(firstVisit.starterPreview, true)
+  assert.equal(firstVisit.locale, "en-US")
+  assert.ok(firstVisit.guides.every((entry) => entry.theologyEnabled !== true))
+  assert.equal(firstVisit.weeks.length, 1)
+  assert.equal(firstVisit.weeks[0].status, "active")
+  assert.equal(firstVisit.weeks[0].completedAt, null)
+  assert.equal(firstVisit.weeks[0].completionSnapshot, null)
+  assert.equal(firstVisit.weeks[0].aiReview, null)
+  assert.deepEqual(firstVisit.weeks[0].data, { text: {}, done: {} })
+  assert.deepEqual(firstVisit.resourceFavorites, [])
+  assert.equal(firstVisit.activeGuideId, guide.id)
+  assert.equal(firstVisit.activeWeekId, firstVisit.weeks[0].id)
+  const restored = nativeWorkspace.parseNativeWorkspace(JSON.stringify(firstVisit))
+  assert.equal(backup.isValidBackup(restored), true)
+  assert.equal(restored.starterPreview, true)
+  assert.deepEqual(restored.weeks[0].data, { text: {}, done: {} })
+
+  firstVisit.guides[0].title = "fixture-first-test-edited-title"
+  firstVisit.weeks[0].programacao.activities[0].description = "fixture-first-test-edited-task"
+  assert.deepEqual(guide, original)
+  const returning = nativeWorkspace.createNativeDemoWorkspace(guide, "returning-user")
+  assert.equal(backup.isValidBackup(returning), true)
+  assert.ok(returning.weeks.some((entry) => entry.status === "completed" && entry.completionSnapshot))
+  assert.ok(returning.weeks.some((entry) => Object.keys(entry.data.text).length > 0))
+  assert.equal(returning.guides[0].title, `Demo: ${original.title}`)
+  assert.equal(JSON.stringify(returning).includes("fixture-first-test-edited"), false)
+  assert.deepEqual(guide, original)
 })
 
 test("native parser preserves valid legacy guide associations, snapshots and authored notes", () => {
@@ -1220,6 +1428,8 @@ test("native removal failure rejects and preserves records without reviving its 
 
 test("every local planner preset is a valid detached seven-day guide with optional secular steps", () => {
   for (const locale of ["en-US", "pt-BR"]) {
+    assert.deepEqual(planner.getPlannerPresets(locale).map((preset) => preset.id), ["rest", "gentle", "routine", "balance", "focus", "momentum", "active", "blank"])
+    assert.deepEqual(planner.getPlannerPresets(locale).map((preset) => preset.effort), [0, 1, 2, 3, 4, 5, 6, 0])
     for (const preset of planner.getPlannerPresets(locale)) {
       const first = planner.buildPresetGuide(preset.id, locale)
       const second = planner.buildPresetGuide(preset.id, locale)
@@ -1232,6 +1442,8 @@ test("every local planner preset is a valid detached seven-day guide with option
       assert.equal(first.weeklyPlan.length, preset.id === "blank" ? 0 : 7)
       assert.deepEqual(first.weeklyPlan.map((task) => task.dayIndex), preset.id === "blank" ? [] : [0, 1, 2, 3, 4, 5, 6])
       assert.deepEqual(first.scheduleTaskIds, first.weeklyPlan.map((task) => task.id))
+      assert.ok(first.weeklyPlan.every((task) => task.countsTowardCompletion === (preset.id !== "rest")))
+      assert.equal(Object.hasOwn(first, "clinicalScore"), false)
       assert.notEqual(first.id, second.id)
       assert.equal(new Set([...first.weeklyPlan, ...second.weeklyPlan].map((task) => task.id)).size, first.weeklyPlan.length + second.weeklyPlan.length)
       first.sections[0].title = "fixture changed section"
@@ -1506,4 +1718,420 @@ test("display titles capitalize English and Portuguese while preserving acronyms
   assert.equal(titleCase(""), "")
   assert.equal(titleCase(titleCase(saved.title)), titleCase(saved.title))
   assert.deepEqual(saved, original)
+})
+
+test("web Guide edits preserve every open and completed Week snapshot, answer, and activity", () => {
+  const guide = planner.createPlannerGuide({ name: "Fixture Anchor", goal: "A small start" })
+  const otherGuide = planner.createPlannerGuide({ name: "Fixture Other Anchor" })
+  const open = guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-open-week", title: "Fixture Open Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" })
+  const completed = guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-completed-week", title: "Fixture Completed Week", startDate: "2026-10-19", createdAt: "2026-10-19T12:00:00.000Z" })
+  const fieldId = guide.sections[0].blocks[1].fields[0].id
+  open.data.text[fieldId] = "Fixture week-only note"
+  open.data.done[guide.weeklyPlan[0].id] = true
+  open.programacao.activities[0].description = "Fixture week-only activity"
+  open.guideSnapshot.sections[0].title = "Fixture Week-only Section"
+  completed.status = "completed"
+  completed.completedAt = "2026-10-25T18:00:00.000Z"
+  completed.completionSnapshot = { totalTasks: 7, completedTasks: 0, completionPercentage: 0, completedAt: completed.completedAt,
+    taskResults: completed.programacao.activities.map((activity) => ({ ...activity, done: false, countsTowardCompletion: activity.countsTowardCompletion !== false })) }
+  completed.aiReview = { verdict: "Fixture saved reflection", summary: "Fixture preserved summary", whatWorked: [], difficulties: [], observedPatterns: [], nextWeekSuggestions: [], generatedAt: completed.completedAt, analysisVersion: 1 }
+  const workspace = { guides: [guide, otherGuide], weeks: [open, completed] }
+  const original = JSON.stringify(workspace)
+  const sections = clone(guide.sections).reverse()
+  sections[1].blocks[1].fields[0].label = "Fixture Future Prompt"
+  const weeklyPlan = clone(guide.weeklyPlan).slice(0, 2)
+  weeklyPlan[0].description = "Fixture Future Activity"
+  const revised = guideRevision.reviseGuideInWorkspace(workspace, guide.id,
+    { title: " Fixture Revised Anchor ", description: "Fixture revised defaults", sections, weeklyPlan }, "2026-10-26T12:00:00.000Z")
+  assert.ok(revised)
+  assert.equal(revised.weeks, workspace.weeks)
+  assert.equal(revised.weeks[0], open)
+  assert.equal(revised.weeks[1], completed)
+  assert.equal(JSON.stringify(workspace), original)
+  assert.equal(revised.guides[1], otherGuide)
+  const anchor = revised.guides[0]
+  assert.equal(anchor.id, guide.id)
+  assert.equal(anchor.version, guide.version + 1)
+  assert.equal(anchor.createdAt, guide.createdAt)
+  assert.equal(anchor.schemaVersion, guide.schemaVersion)
+  assert.equal(anchor.customized, true)
+  assert.equal(anchor.title, "Fixture Revised Anchor")
+  assert.equal(anchor.intro.title, anchor.title)
+  assert.equal(anchor.description, "Fixture revised defaults")
+  assert.deepEqual(anchor.scheduleTaskIds, weeklyPlan.map((activity) => activity.id))
+  assert.deepEqual(anchor.sections.map((section) => section.number), ["01", "02"])
+  assert.equal(anchor.sections[1].blocks[1].fields[0].id, fieldId)
+  assert.equal(anchor.theologyEnabled, guide.theologyEnabled)
+  assert.equal(anchor.bibleVersion, guide.bibleVersion)
+  assert.equal(backup.isValidBackup(payload({ guides: revised.guides, activeGuideId: guide.id, weeks: revised.weeks, activeWeekId: open.id })), true)
+  sections[1].blocks[1].fields[0].label = "Fixture changed editor draft"
+  weeklyPlan[0].description = "Fixture changed routine draft"
+  assert.equal(anchor.sections[1].blocks[1].fields[0].label, "Fixture Future Prompt")
+  assert.equal(anchor.weeklyPlan[0].description, "Fixture Future Activity")
+  assert.equal(JSON.stringify(workspace), original)
+})
+
+test("Add Week uses the selected revised Guide defaults and never inherits earlier Week edits", () => {
+  const guide = planner.createPlannerGuide({ name: "Fixture Original Anchor" })
+  const previous = guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-earlier-week", title: "Fixture Earlier Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" })
+  const oldFieldId = guide.sections[0].blocks[1].fields[0].id
+  previous.data.text[oldFieldId] = "Fixture retained note"
+  previous.data.done[guide.weeklyPlan[0].id] = true
+  previous.programacao.activities = [{ id: "fixture-week-only-task", dayIndex: 6, time: "21:00", description: "Fixture one-week change", order: 0 }]
+  previous.guideSnapshot.sections[0].title = "Fixture Historical Prompt"
+  const before = JSON.stringify(previous)
+  const revised = guideRevision.reviseGuideInWorkspace({ guides: [guide], weeks: [previous] }, guide.id,
+    { title: "Fixture Next Anchor", description: "Fixture next defaults", sections: [{ id: "fixture-future-section", number: "09", title: "Fixture Future Section", kicker: "OPTIONAL", blocks: [{ type: "fields", fields: [{ kind: "textarea", id: "fixture-future-note", label: "Fixture Future Note" }] }] }],
+      weeklyPlan: [{ id: "fixture-default-task", dayIndex: 2, time: "08:30", description: "Fixture reusable default", order: 0, countsTowardCompletion: true }, { id: "fixture-optional-task", dayIndex: 3, time: "11:00", description: "Fixture informational default", order: 0, countsTowardCompletion: false }] }, "2026-10-19T12:00:00.000Z")
+  const next = guideRevision.createWeekFromGuide(revised.guides, guide.id, { id: "fixture-next-week", title: "Fixture Next Week", startDate: "2026-12-28", createdAt: "2026-12-28T12:00:00.000Z" })
+  assert.ok(next)
+  assert.equal(next.guideId, guide.id)
+  assert.equal(next.templateId, guide.id)
+  assert.equal(next.guideVersion, guide.version + 1)
+  assert.equal(next.guideSnapshot.title, "Fixture Next Anchor")
+  assert.deepEqual(next.guideSnapshot.sections, revised.guides[0].sections)
+  assert.deepEqual(next.programacao.activities, revised.guides[0].weeklyPlan)
+  assert.deepEqual(next.data, { text: {}, done: {} })
+  assert.deepEqual(next.progresso, { total: 1, concluidas: 0, percentual: 0 })
+  assert.equal(next.startDate, "2026-12-28")
+  assert.equal(next.endDate, "2027-01-03")
+  assert.equal(next.status, "active")
+  assert.equal(next.aiReview, null)
+  assert.equal(next.completionSnapshot, null)
+  assert.equal(JSON.stringify(previous), before)
+  assert.equal(guideRevision.sectionsForWeek(previous, revised.guides[0]), previous.guideSnapshot.sections)
+  assert.equal(previous.guideSnapshot.sections[0].title, "Fixture Historical Prompt")
+  assert.equal(previous.data.text[oldFieldId], "Fixture retained note")
+  assert.equal(backup.isValidBackup(payload({ guides: revised.guides, activeGuideId: guide.id, weeks: [previous, next], activeWeekId: next.id })), true)
+})
+
+test("new web Weeks detach nested defaults from their Guide and each other", () => {
+  const guide = planner.createPlannerGuide({ name: "Fixture Detached Anchor" })
+  const other = planner.createPlannerGuide({ name: "Fixture Unselected Anchor", preset: "blank" })
+  const make = (id) => guideRevision.createWeekFromGuide([other, guide], guide.id, { id, title: "Fixture Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" })
+  const first = make("fixture-first-week")
+  const sameOperation = make("fixture-first-week")
+  const second = make("fixture-second-week")
+  assert.equal(first.guideId, guide.id, "the selected Guide is used even when it is not the first anchor")
+  assert.equal(first.guideSnapshot.title, "Fixture Detached Anchor")
+  assert.deepEqual(first, sameOperation, "the caller supplies one stable ID and timestamp")
+  assert.notEqual(first.guideSnapshot.sections, guide.sections)
+  assert.notEqual(first.guideSnapshot.sections[0].blocks, guide.sections[0].blocks)
+  assert.notEqual(first.guideSnapshot.completionConfig.analysisDimensions, guide.completionConfig.analysisDimensions)
+  assert.notEqual(first.programacao.activities[0], guide.weeklyPlan[0])
+  const originalGuide = JSON.stringify(guide)
+  const originalSecond = JSON.stringify(second)
+  first.guideSnapshot.sections[0].blocks[1].fields[0].label = "Fixture local prompt"
+  first.guideSnapshot.completionConfig.analysisDimensions.push("Fixture local review dimension")
+  first.programacao.activities[0].description = "Fixture local routine"
+  first.data.text["fixture-note"] = "Fixture local note"
+  first.data.done[first.programacao.activities[0].id] = true
+  assert.equal(JSON.stringify(guide), originalGuide)
+  assert.equal(JSON.stringify(second), originalSecond)
+  guide.sections[0].title = "Fixture changed reusable section"
+  guide.weeklyPlan[0].description = "Fixture changed reusable routine"
+  assert.equal(JSON.stringify(second), originalSecond)
+})
+
+test("web Guide transitions reject unknown anchors and invalid edits without changing records", () => {
+  const guide = planner.createPlannerGuide()
+  const originalWeek = guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-valid-week", title: "Fixture Valid Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" })
+  const workspace = { guides: [guide], weeks: [originalWeek] }
+  const original = JSON.stringify(workspace)
+  const updates = { title: guide.title, description: guide.description, sections: clone(guide.sections), weeklyPlan: clone(guide.weeklyPlan) }
+  const revise = (changes, id = guide.id) => guideRevision.reviseGuideInWorkspace(workspace, id, { ...updates, ...changes }, "2026-10-13T12:00:00.000Z")
+  assert.equal(revise({}, "fixture-unknown-guide"), null)
+  assert.equal(revise({ title: " " }), null)
+  assert.equal(revise({ title: "x".repeat(301) }), null)
+  assert.equal(revise({ sections: [...updates.sections, clone(updates.sections[0])] }), null)
+  assert.equal(revise({ weeklyPlan: [...updates.weeklyPlan, clone(updates.weeklyPlan[0])] }), null)
+  assert.equal(revise({ weeklyPlan: [{ ...updates.weeklyPlan[0], dayIndex: 7 }] }), null)
+  assert.equal(revise({ weeklyPlan: [null] }), null)
+  assert.equal(guideRevision.createWeekFromGuide([guide], "fixture-unknown-guide", { id: "fixture-new-week", title: "Fixture Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" }), null)
+  assert.equal(guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-new-week", title: "Fixture Week", startDate: "2026-02-30", createdAt: "2026-10-12T12:00:00.000Z" }), null)
+  assert.equal(JSON.stringify(workspace), original)
+  const empty = revise({ sections: [], weeklyPlan: [] })
+  assert.ok(empty, "every section and default task remains optional")
+  const emptyWeek = guideRevision.createWeekFromGuide(empty.guides, guide.id, { id: "fixture-empty-week", title: "Fixture Empty Week", startDate: "2026-10-19", createdAt: "2026-10-19T12:00:00.000Z" })
+  assert.deepEqual(emptyWeek.guideSnapshot.sections, [])
+  assert.deepEqual(emptyWeek.programacao.activities, [])
+  assert.deepEqual(emptyWeek.progresso, { total: 0, concluidas: 0, percentual: 0 })
+  assert.deepEqual(guideRevision.sectionsForWeek(emptyWeek, guide), [])
+  const legacy = { ...originalWeek, guideSnapshot: null }
+  assert.equal(guideRevision.sectionsForWeek(legacy, guide), guide.sections)
+  assert.equal(JSON.stringify(workspace), original)
+})
+
+function plannedWeekFixture() {
+  const guide = planner.buildPresetGuide("gentle", "en-US", { name: "Fixture Internal Plan" }, { id: "fixture-planned-source", createdAt: "2026-10-12T12:00:00.000Z" })
+  const first = guideRevision.createWeekFromGuide([guide], guide.id, { id: "fixture-selected-week", title: "Fixture Selected Week", startDate: "2026-10-12", createdAt: "2026-10-12T12:00:00.000Z" })
+  first.setup = { pattern: "gentle", expectation: "Keep my chosen step", name: "Fixture Selected Week", routine: "After lunch", whatHelps: "A quiet place", thingsToAvoid: "Late tasks", additionalNotes: "Every step is optional", intensity: "light", burdens: ["worry", "other"], burdensOther: "Fixture chosen burden", discipline: ["consistency", "other"], disciplineOther: "Fixture chosen routine", psychology: "humanistic", psychologyOther: "Fixture inactive psychology text", spirituality: false, theology: "none", theologyOther: "Fixture inactive tradition text" }
+  first.programacao.activities[0].description = "Fixture actual week-only activity"
+  first.programacao.activities[0].time = "14:30"
+  first.guideSnapshot.sections[0].title = "Fixture Customized Notes"
+  const fieldId = first.guideSnapshot.sections[0].blocks[1].fields[0].id
+  first.data.text = { [fieldId]: "Fixture daily words\nPreserve spacing  ", "fixture-removed-field": "Fixture note from a removed field" }
+  first.data.done[first.programacao.activities[0].id] = true
+  const otherGuide = planner.buildPresetGuide("blank", "en-US", {}, { id: "fixture-other-source", createdAt: "2026-12-28T12:00:00.000Z" })
+  const other = guideRevision.createWeekFromGuide([otherGuide], otherGuide.id, { id: "fixture-other-week", title: "Fixture Other Week", startDate: "2026-12-28", createdAt: "2026-12-28T12:00:00.000Z" })
+  return { guides: [guide, otherGuide], weeks: [first, other], activeWeekId: first.id, activeGuideId: guide.id }
+}
+const plannedOptions = { id: "fixture-next-week", guideId: "fixture-next-source", createdAt: "2027-01-04T12:00:00.000Z", today: "2026-10-13", locale: "en-US" }
+
+test("Week setup hydration preserves every explicit preference and never reads daily answers", () => {
+  const fixture = plannedWeekFixture()
+  const previous = fixture.weeks[0]
+  const before = JSON.stringify(fixture)
+  const hydrated = weekPlanning.setupFromPreviousWeek(previous, fixture.guides[0])
+  assert.deepEqual(hydrated, previous.setup)
+  hydrated.burdens.push("low-energy")
+  hydrated.expectation = "Fixture edited next-week expectation"
+  assert.equal(JSON.stringify(fixture), before)
+  const legacy = { ...previous }; delete legacy.setup
+  Object.defineProperty(legacy, "data", { get() { throw new Error("fixture hydration must not read daily notes") } })
+  const guessed = weekPlanning.setupFromPreviousWeek(legacy, fixture.guides[0])
+  assert.deepEqual(guessed, { pattern: "gentle", expectation: "", name: previous.title, psychology: "none", spirituality: false, theology: "none" })
+  assert.equal(weekPlanning.setupFromPreviousWeek(fixture.weeks[1], fixture.guides[1]).pattern, "blank")
+  assert.equal(weekPlanning.setupFromPreviousWeek().pattern, "gentle")
+})
+
+test("adding the same Week pattern copies exact daily notes and actual activities while resetting results", () => {
+  const fixture = plannedWeekFixture()
+  const previous = fixture.weeks[0]
+  previous.status = "completed"
+  previous.completedAt = "2026-10-18T18:00:00.000Z"
+  previous.completionSnapshot = { totalTasks: 7, completedTasks: 1, completionPercentage: 14, completedAt: previous.completedAt,
+    taskResults: previous.programacao.activities.map((activity) => ({ ...activity, done: Boolean(previous.data.done[activity.id]), countsTowardCompletion: true })) }
+  previous.aiReview = { verdict: "Fixture previous reflection", summary: "Fixture retained summary", whatWorked: [], difficulties: [], observedPatterns: [], nextWeekSuggestions: [], generatedAt: previous.completedAt, analysisVersion: 1 }
+  const before = JSON.stringify(fixture)
+  const submitted = weekPlanning.setupFromPreviousWeek(previous, fixture.guides[0])
+  submitted.expectation = "Fixture new expectation"
+  const next = weekPlanning.createPlannedWeekInWorkspace(fixture, submitted, plannedOptions)
+  assert.ok(next)
+  const created = next.newWeek
+  assert.equal(created.startDate, "2027-01-04", "the latest end date across every internal template determines the default")
+  assert.equal(created.endDate, "2027-01-10")
+  assert.deepEqual(created.setup, submitted)
+  assert.deepEqual(created.data.text, previous.data.text)
+  assert.notEqual(created.data.text, previous.data.text)
+  assert.deepEqual(created.data.done, {})
+  assert.deepEqual(created.programacao.activities, previous.programacao.activities)
+  assert.notEqual(created.programacao.activities[0], previous.programacao.activities[0])
+  assert.deepEqual(created.guideSnapshot.sections, previous.guideSnapshot.sections)
+  assert.notEqual(created.guideSnapshot.sections[0].blocks, previous.guideSnapshot.sections[0].blocks)
+  assert.equal(created.status, "active")
+  assert.equal(created.completedAt, null)
+  assert.equal(created.completionSnapshot, null)
+  assert.equal(created.aiReview, null)
+  assert.equal(created.aiReviewOutdated, false)
+  assert.deepEqual(created.progresso, { total: 7, concluidas: 0, percentual: 0 })
+  assert.equal(next.weeks[0], previous)
+  assert.equal(next.weeks[1], fixture.weeks[1])
+  assert.equal(next.guides[0], fixture.guides[0])
+  assert.equal(next.guides[1], fixture.guides[1])
+  assert.equal(JSON.stringify(fixture), before)
+  assert.equal(backup.isValidBackup({ schemaVersion: 4, ...next }), true)
+  const repeated = weekPlanning.createPlannedWeekInWorkspace(fixture, submitted, plannedOptions)
+  assert.deepEqual(repeated, next, "explicit identities, dates, and timestamps make the transition deterministic")
+  created.data.text["fixture-removed-field"] = "Fixture changed new-week note"
+  created.setup.burdens.push("low-energy")
+  created.programacao.activities[0].description = "Fixture changed new-week task"
+  created.guideSnapshot.sections[0].title = "Fixture changed new-week section"
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("changing Week patterns rebuilds the selected voluntary plan without losing prior notes or custom sections", () => {
+  const fixture = plannedWeekFixture()
+  const before = JSON.stringify(fixture)
+  for (const pattern of ["rest", "routine", "balance", "focus", "momentum", "active", "blank"]) {
+    const selected = { ...clone(fixture.weeks[0].setup), pattern, expectation: "Fixture chosen expectation", name: "Fixture New Name" }
+    const next = weekPlanning.createPlannedWeekInWorkspace(fixture, selected, plannedOptions)
+    assert.ok(next, pattern)
+    assert.equal(next.newWeek.setup.pattern, pattern)
+    assert.equal(next.newWeek.setup.expectation, selected.expectation)
+    assert.equal(next.newWeek.title, selected.name)
+    assert.deepEqual(next.newWeek.data.text, fixture.weeks[0].data.text)
+    assert.deepEqual(next.newWeek.data.done, {})
+    assert.deepEqual(next.newWeek.guideSnapshot.sections, fixture.weeks[0].guideSnapshot.sections)
+    assert.equal(next.newWeek.programacao.activities.length, pattern === "blank" ? 0 : 7)
+    assert.deepEqual(next.newWeek.programacao.activities.map((activity) => activity.dayIndex), pattern === "blank" ? [] : [0, 1, 2, 3, 4, 5, 6])
+    assert.ok(next.newWeek.programacao.activities.every((activity) => activity.id.startsWith(plannedOptions.guideId)))
+    assert.ok(next.newWeek.programacao.activities.every((activity) => activity.countsTowardCompletion === (pattern !== "rest")))
+    assert.equal(next.newWeek.progresso.total, pattern === "rest" || pattern === "blank" ? 0 : 7)
+    assert.equal(JSON.stringify(fixture), before)
+  }
+})
+
+test("Week customization changes only the addressed open Week and retains field identities and every daily answer", () => {
+  const fixture = plannedWeekFixture()
+  const before = JSON.stringify(fixture)
+  const target = fixture.weeks[0]
+  const sections = clone(target.guideSnapshot.sections)
+  const fieldId = sections[0].blocks[1].fields[0].id
+  sections[0].blocks[1].fields[0].label = "Fixture Revised Weekly Prompt"
+  const activities = clone(target.programacao.activities).slice(0, 2)
+  activities[1].description = "Fixture new weekly step"
+  const revised = weekPlanning.updateWeekPlanInWorkspace(fixture, target.id, { title: "Fixture Renamed Week", sections, weeklyPlan: activities }, "2026-10-14T12:00:00.000Z")
+  assert.ok(revised)
+  assert.equal(revised.guides, fixture.guides)
+  assert.equal(revised.weeks[1], fixture.weeks[1])
+  assert.equal(revised.weeks[0].data, target.data)
+  assert.equal(revised.weeks[0].guideSnapshot.sections[0].blocks[1].fields[0].id, fieldId)
+  assert.equal(revised.weeks[0].data.text[fieldId], target.data.text[fieldId])
+  assert.equal(revised.weeks[0].data.text["fixture-removed-field"], target.data.text["fixture-removed-field"])
+  assert.deepEqual(revised.weeks[0].progresso, { total: 2, concluidas: 1, percentual: 50 })
+  assert.equal(JSON.stringify(fixture), before)
+  sections[0].blocks[1].fields[0].label = "Fixture later editor mutation"
+  activities[0].description = "Fixture later activity mutation"
+  assert.equal(revised.weeks[0].guideSnapshot.sections[0].blocks[1].fields[0].label, "Fixture Revised Weekly Prompt")
+  assert.equal(revised.weeks[0].programacao.activities[0].description, target.programacao.activities[0].description)
+  assert.equal(weekPlanning.updateWeekPlanInWorkspace(fixture, "fixture-unknown-week", { title: "Fixture", sections: [], weeklyPlan: [] }, "2026-10-14T12:00:00.000Z"), null)
+  const completed = { ...fixture, weeks: [{ ...target, status: "completed" }, fixture.weeks[1]] }
+  assert.equal(weekPlanning.updateWeekPlanInWorkspace(completed, target.id, { title: "Fixture", sections: [], weeklyPlan: [] }, "2026-10-14T12:00:00.000Z"), null)
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("Week setup backup validation accepts legacy records and rejects unknown, duplicated, forged, or oversized preferences", () => {
+  const fixture = plannedWeekFixture()
+  const setup = clone(fixture.weeks[0].setup)
+  assert.equal(weekSetup.isValidWeekSetup(setup), true)
+  assert.equal(backup.isValidBackup({ schemaVersion: 4, ...fixture }), true)
+  const restored = JSON.parse(JSON.stringify({ schemaVersion: 4, ...fixture }))
+  assert.deepEqual(restored.weeks[0].setup, setup)
+  assert.equal(backup.isValidBackup(restored), true)
+  const legacy = clone(fixture); delete legacy.weeks[0].setup
+  assert.equal(backup.isValidBackup({ schemaVersion: 4, ...legacy }), true)
+  for (const change of [{ pattern: "unsupported" }, { expectation: "x".repeat(1201) }, { name: "x".repeat(101) },
+    { burdens: ["worry", "worry"] }, { burdens: ["unsupported"] }, { burdens: "worry" }, { discipline: ["none"] },
+    { psychology: "unsupported" }, { theology: "unsupported" }, { spirituality: "true" },
+    { burdensOther: "x".repeat(1201) }, { intensity: "high" }, { privateAnswers: "fixture forbidden setup field" }]) {
+    const malformed = { ...setup, ...change }
+    assert.equal(weekSetup.isValidWeekSetup(malformed), false, JSON.stringify(Object.keys(change)))
+    const invalid = clone(fixture); invalid.weeks[0].setup = malformed
+    assert.equal(backup.isValidBackup({ schemaVersion: 4, ...invalid }), false)
+  }
+  const getter = { ...setup }; Object.defineProperty(getter, "expectation", { enumerable: true, get() { throw new Error("fixture getter cannot be read") } })
+  assert.equal(weekSetup.isValidWeekSetup(getter), false)
+  for (const key of Object.keys(weekSetup.WEEK_SETUP_LIMITS)) {
+    assert.equal(weekSetup.isValidWeekSetup({ ...setup, [key]: "x".repeat(weekSetup.WEEK_SETUP_LIMITS[key]) }), true, key)
+  }
+})
+
+test("only selected Week preferences and active Other fields appear as ordinary local notes", () => {
+  assert.equal(weekOptions.selectedWeekPreference("burdens", ["worry"], "Fixture unselected text"), "Worry or overthinking")
+  assert.equal(weekOptions.selectedWeekPreference("burdens", ["other"], " Fixture selected text "), "Fixture selected text")
+  assert.equal(weekOptions.selectedWeekPreference("psychology", "none", "Fixture unselected psychology"), "")
+  assert.equal(weekOptions.selectedWeekPreference("psychology", "other", " Fixture chosen approach "), "Fixture chosen approach")
+  assert.equal(weekOptions.selectedWeekPreference("theology", "other", " Fixture chosen tradition ", "pt-BR"), "Fixture chosen tradition")
+  assert.equal(weekOptions.selectedSpiritualPreference(false, "christianity", "Fixture inactive tradition"), "")
+  assert.equal(weekOptions.selectedSpiritualPreference(true, "none", "Fixture inactive tradition"), "No specific tradition")
+  assert.equal(weekOptions.selectedSpiritualPreference(true, "other", ""), "Other (not specified)")
+  assert.equal(weekOptions.selectedSpiritualPreference(true, "christianity", "Fixture inactive tradition"), "Christianity")
+  assert.equal(weekOptions.selectedSpiritualPreference(true, "other", " Fixture chosen tradition "), "Fixture chosen tradition")
+  const fixture = plannedWeekFixture()
+  const originalFetch = global.fetch
+  global.fetch = () => { throw new Error("fixture local preferences cannot contact providers") }
+  try {
+    const notes = weekPlanning.weekPreferenceNotes(fixture.weeks[0].setup)
+    assert.equal(notes.length, 8)
+    assert.ok(notes.every((note) => typeof note.label === "string" && typeof note.text === "string"))
+    const text = JSON.stringify(notes)
+    assert.ok(text.includes("Fixture chosen burden"))
+    assert.ok(text.includes("Fixture chosen routine"))
+    assert.ok(text.includes("Humanistic / person-centered"))
+    for (const included of ["Fixture Selected Week", "After lunch", "A quiet place", "Late tasks", "Every step is optional"]) assert.ok(text.includes(included))
+    for (const omitted of ["Fixture inactive psychology text", "Fixture inactive tradition text", "Fixture daily words"]) assert.equal(text.includes(omitted), false)
+    assert.deepEqual(weekPlanning.weekPreferenceNotes({ pattern: "blank", expectation: "", psychology: "none", theology: "none", spirituality: false }), [])
+    const explicit = weekPlanning.weekPreferenceNotes({ pattern: "rest", expectation: "", spirituality: true, theology: "other", theologyOther: "Fixture my own tradition" })
+    assert.equal(explicit.length, 1)
+    assert.equal(explicit[0].text, "Fixture my own tradition")
+    assert.deepEqual(weekPlanning.weekPreferenceNotes({ pattern: "rest", expectation: "", spirituality: true, theology: "none", theologyOther: "Fixture inactive tradition" }), [
+      { label: "Spiritual preference", text: "No specific tradition" },
+    ])
+    assert.deepEqual(weekPlanning.weekPreferenceNotes({ pattern: "rest", expectation: "", spirituality: true, theology: "other", theologyOther: "" }), [
+      { label: "Spiritual preference", text: "Other (not specified)" },
+    ])
+  } finally { global.fetch = originalFetch }
+})
+
+test("Week navigation crosses every legacy template without mutating their chronological records", () => {
+  const fixture = plannedWeekFixture()
+  const before = JSON.stringify(fixture)
+  const first = fixture.weeks[0], last = fixture.weeks[1]
+  const middle = { ...clone(first), id: "fixture-middle-week", guideId: last.guideId, startDate: "2026-10-19", endDate: "2026-10-25" }
+  const unordered = [last, first, middle]
+  const chosen = weekPlanning.navigationForWeeks(unordered, middle.id)
+  assert.equal(chosen.activeWeek, middle)
+  assert.equal(chosen.previousWeek, first)
+  assert.equal(chosen.nextWeek, last)
+  assert.equal(weekPlanning.navigationForWeeks(unordered, first.id).previousWeek, null)
+  assert.equal(weekPlanning.navigationForWeeks(unordered, last.id).nextWeek, null)
+  assert.equal(weekPlanning.navigationForWeeks(unordered, "fixture-stale-id").activeWeek, first)
+  assert.deepEqual(weekPlanning.navigationForWeeks([], null), { activeWeek: null, previousWeek: null, nextWeek: null })
+  assert.deepEqual(unordered.map((item) => item.id), [last.id, first.id, middle.id])
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("new Week spirituality requires opt-in and preserves authored notes when inherited scripture is disabled", () => {
+  const fixture = plannedWeekFixture()
+  const previous = fixture.weeks[0]
+  previous.guideSnapshot.theologyEnabled = true
+  previous.guideSnapshot.bibleVersion = "KJV"
+  previous.guideSnapshot.completionConfig.theologyReviewEnabled = true
+  previous.guideSnapshot.sections[0].scripture = { verses: [{ ref: "Fixture reference", ara: "Fixture verse", nvt: "Fixture verse", kjv: "Fixture verse" }], comentario: "Fixture app-authored commentary", oracao: "Fixture app-authored prayer" }
+  previous.data.text["fixture-authored-prayer"] = "Fixture personal prayer and scripture notes stay exactly as written."
+  const before = JSON.stringify(fixture)
+  for (const selection of [{ spirituality: false, theology: "christianity" }, { spirituality: true, theology: "islam" }, {}]) {
+    const setup = { pattern: "gentle", expectation: "Fixture chosen expectation", ...selection }
+    const next = weekPlanning.createPlannedWeekInWorkspace(fixture, setup, plannedOptions)
+    assert.ok(next)
+    assert.equal(next.newWeek.guideSnapshot.sections[0].scripture, undefined)
+    assert.equal(next.newWeek.guideSnapshot.bibleVersion, null)
+    assert.deepEqual(next.newWeek.data.text, previous.data.text)
+    assert.equal(next.newWeek.guideSnapshot.theologyEnabled, selection.spirituality === true)
+    assert.equal(JSON.stringify(fixture), before)
+  }
+  const explicit = weekPlanning.createPlannedWeekInWorkspace(fixture, { pattern: "gentle", expectation: "", spirituality: true, theology: "christianity" }, plannedOptions)
+  assert.deepEqual(explicit.newWeek.guideSnapshot.sections[0].scripture, previous.guideSnapshot.sections[0].scripture)
+  assert.equal(explicit.newWeek.guideSnapshot.bibleVersion, "KJV")
+  assert.deepEqual(explicit.newWeek.data.text, previous.data.text)
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("invalid planned Week transitions preserve all records before any identity or date can be applied", () => {
+  const fixture = plannedWeekFixture()
+  const before = JSON.stringify(fixture)
+  const setup = clone(fixture.weeks[0].setup)
+  for (const options of [{ ...plannedOptions, startDate: "2026-02-30" }, { ...plannedOptions, title: "x".repeat(501) },
+    { ...plannedOptions, id: fixture.weeks[0].id }, { ...plannedOptions, guideId: fixture.guides[0].id },
+    { ...plannedOptions, guideId: "__proto__" }]) {
+    assert.equal(weekPlanning.createPlannedWeekInWorkspace(fixture, setup, options), null)
+    assert.equal(JSON.stringify(fixture), before)
+  }
+  assert.equal(weekPlanning.createPlannedWeekInWorkspace(fixture, { ...setup, pattern: "unknown" }, plannedOptions), null)
+  const explicit = weekPlanning.createPlannedWeekInWorkspace(fixture, setup, { ...plannedOptions, startDate: "2028-02-26", title: "Fixture Explicit Name" })
+  assert.equal(explicit.newWeek.startDate, "2028-02-26")
+  assert.equal(explicit.newWeek.endDate, "2028-03-03")
+  assert.equal(explicit.newWeek.title, "Fixture Explicit Name")
+  assert.deepEqual(explicit.newWeek.setup, setup)
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("an empty first-real-Week workspace starts today without inherited results or notes", () => {
+  const starter = planner.createStarterGuide()
+  const source = { guides: [starter], weeks: [], activeGuideId: starter.id, activeWeekId: null }
+  const before = JSON.stringify(source)
+  const created = weekPlanning.createPlannedWeekInWorkspace(source, { pattern: "gentle", expectation: "Fixture first real choice" }, plannedOptions)
+  assert.ok(created)
+  assert.equal(created.weeks.length, 1)
+  assert.equal(created.newWeek.startDate, plannedOptions.today)
+  assert.equal(created.newWeek.endDate, "2026-10-19")
+  assert.equal(created.newWeek.title, "Week 1")
+  assert.deepEqual(created.newWeek.data, { text: {}, done: {} })
+  assert.equal(created.newWeek.completedAt, null)
+  assert.equal(created.newWeek.completionSnapshot, null)
+  assert.equal(created.newWeek.aiReview, null)
+  assert.equal(created.guides[0], starter)
+  assert.equal(JSON.stringify(source), before)
+  assert.equal(backup.isValidBackup({ schemaVersion: 4, ...created }), true)
 })

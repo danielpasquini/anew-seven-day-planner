@@ -126,7 +126,7 @@ export const enUS: TranslationDictionary = {
       pdfDesc: "Opens the browser print dialog formatted in A4 without menus or sidebars.",
       markdownDesc: "A readable document with your week's activities, answers, and reflections.",
       weekJsonDesc: "Structured JSON with schedule, responses, tasks, progress, snapshot, and review.",
-      backupFullDesc: "Complete backup file with all guides, templates, and weeks.",
+      backupFullDesc: "Complete backup file with all weeks, notes, patterns, and preferences.",
     },
     activeWeekLabel: "Active week:",
   },
@@ -147,7 +147,7 @@ export const enUS: TranslationDictionary = {
     weekNumberLabel: "Week",
     weekSingular: "week",
     weekPlural: "weeks",
-    historyTitle: "Guide Week History",
+    historyTitle: "Week History",
   },
   schedule: {
     title: "Weekly Activity Schedule",

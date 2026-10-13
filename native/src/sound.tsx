@@ -2,8 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { AppState } from "react-native"
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio"
 
-type Sounds = { enabled: boolean; toggle: () => void; tap: () => void; opening: () => void; stop: () => void }
-const SoundContext = createContext<Sounds>({ enabled: false, toggle() {}, tap() {}, opening() {}, stop() {} })
+type Sounds = { enabled: boolean; toggle: () => void; tap: () => void; opening: () => void; stop: () => void; mute: () => void }
+const SoundContext = createContext<Sounds>({ enabled: false, toggle() {}, tap() {}, opening() {}, stop() {}, mute() {} })
 
 /** Sound is optional and stays in memory. No microphone or background playback. */
 export function NativeSoundProvider({ children }: { children: React.ReactNode }) {
@@ -14,6 +14,7 @@ export function NativeSoundProvider({ children }: { children: React.ReactNode })
   const chime = useAudioPlayer(require("../assets/tap.wav"))
   const branch = useAudioPlayer(require("../assets/zen.wav"))
   const stop = useCallback(() => { playbackEpoch.current++; chime.pause(); branch.pause() }, [chime, branch])
+  const mute = useCallback(() => { enabledRef.current = false; setEnabled(false); stop() }, [stop])
   useEffect(() => {
     void setAudioModeAsync({ allowsRecording: false, playsInSilentMode: false, shouldPlayInBackground: false, interruptionMode: "mixWithOthers" }).catch(() => {})
     chime.volume = .25
@@ -41,6 +42,6 @@ export function NativeSoundProvider({ children }: { children: React.ReactNode })
       void chime.seekTo(0).then(() => { if (enabledRef.current && epoch === playbackEpoch.current && AppState.currentState === "active") chime.play() }).catch(() => {})
     }
   }, [chime, stop])
-  return <SoundContext.Provider value={{ enabled, toggle, tap, opening, stop }}>{children}</SoundContext.Provider>
+  return <SoundContext.Provider value={{ enabled, toggle, tap, opening, stop, mute }}>{children}</SoundContext.Provider>
 }
 export const useNativeSound = () => useContext(SoundContext)

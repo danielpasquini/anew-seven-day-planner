@@ -17,7 +17,7 @@ const lora = Lora({
 export const metadata: Metadata = {
   title: 'Anew · Seven Days. Small Steps.',
   description:
-    'A calm seven-day planner with small steps, ready-made weeks without AI, and guides you can make your own. Your week, at your pace.',
+    'A calm seven-day planner with small steps, ready-made weeks without AI, and weekly notes you can make your own. Your week, at your pace.',
   applicationName: 'Anew',
 }
 

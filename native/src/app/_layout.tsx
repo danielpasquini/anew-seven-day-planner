@@ -17,6 +17,8 @@ function SoundControl() {
 function NativeCanvas() {
   const [reduced, setReduced] = useState(false)
   const c = useColors(), app = useNativeApp()
+  const { mute } = useNativeSound()
+  useEffect(() => { if (app.demoEpoch > 0) mute() }, [app.demoEpoch, mute])
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduced)
     const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced)
@@ -24,7 +26,7 @@ function NativeCanvas() {
   }, [])
   return <SafeAreaView style={{ flex: 1, backgroundColor: c.background }} edges={["top"]}>
       <StatusBar style={app.theme === "dark" ? "light" : "dark"} />
-      <NativeOpening>
+      <NativeOpening replay={app.demoEpoch} firstVisit={app.demo ? app.demoScenario === "first-visit" : undefined}>
         <SoundControl />
         <Stack screenOptions={{ headerShown: false, animation: reduced ? "none" : "fade", animationDuration: 450, contentStyle: { backgroundColor: c.background } }} />
       </NativeOpening>

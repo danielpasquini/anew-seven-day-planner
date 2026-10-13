@@ -17,10 +17,11 @@ export interface WelcomeJourneyProps {
   onComplete: (answers: OnboardingAnswers) => void
   onPreview: (answers: OnboardingAnswers) => void
   onSignIn?: () => void
+  testMode?: boolean
 }
 
-/** Optional preferences stay in memory; a local guide can be previewed before account creation. */
-export function WelcomeJourney({ onComplete, onPreview, onSignIn }: WelcomeJourneyProps) {
+/** Optional preferences stay in memory; a local week can be previewed before account creation. */
+export function WelcomeJourney({ onComplete, onPreview, onSignIn, testMode = false }: WelcomeJourneyProps) {
   const [step, setStep] = useState(0)
   const [personalizing, setPersonalizing] = useState(false)
   const [answers, setAnswers] = useState<OnboardingAnswers>({})
@@ -50,7 +51,7 @@ export function WelcomeJourney({ onComplete, onPreview, onSignIn }: WelcomeJourn
     <div className={styles.journey}>
       <header className={styles.header}>
         <div className={styles.brand} aria-label="Anew"><span className={styles.brandMark}><BrandMark className="size-5" /></span><span>Anew<span className={styles.brandDot}>.</span></span></div>
-        <button type="button" onClick={() => onPreview({ ...answers })} className={styles.quietLink}>Skip to preview <MoveUpRight size={14} aria-hidden="true" /></button>
+        <button type="button" onClick={() => onPreview({ ...answers })} className={styles.quietLink}>{testMode ? "Skip to Test Workspace" : "Skip to preview"} <MoveUpRight size={14} aria-hidden="true" /></button>
       </header>
 
       <main className={styles.layout}>
@@ -80,21 +81,21 @@ export function WelcomeJourney({ onComplete, onPreview, onSignIn }: WelcomeJourn
               <p><Check size={14} aria-hidden="true" />Ready-made weeks without AI</p>
               <p><Check size={14} aria-hidden="true" />Your own sections, notes, and choices</p>
             </div>
-            <div className={styles.actions}><button type="button" className={styles.primary} onClick={() => onPreview({})}>Preview a Week <ArrowRight size={17} aria-hidden="true" /></button></div>
+            <div className={styles.actions}><button type="button" className={styles.primary} onClick={() => onPreview({})}>{testMode ? "Open Fresh Test Week" : "Preview a Week"} <ArrowRight size={17} aria-hidden="true" /></button></div>
             <button type="button" className={styles.skipStep} onClick={() => setPersonalizing(true)}>Personalize My Week <ArrowRight size={14} aria-hidden="true" /></button>
             <p className={styles.privacyNote}>Personalization questions and AI are optional. Your preview stays on this device; you choose whether to use it.</p>
           </div> : <>
           <button type="button" className={styles.quietLink} onClick={() => setPersonalizing(false)}><ArrowLeft size={14} aria-hidden="true" /> Back to the simple start</button>
           <nav className={styles.progress} aria-label="Optional weekly preferences">
-            <span className={styles.progressTrack}>{[...QUESTIONS.map((item) => item.label), "Your guide"].map((label, index) => <button type="button" key={label} onClick={() => moveTo(index)} aria-label={index === QUESTIONS.length ? "Your guide preview" : `${label}, question ${index + 1} of ${QUESTIONS.length}`} aria-current={step === index ? "step" : undefined} className={styles.progressButton}><span data-current={step === index} data-visited={index < step} /></button>)}</span>
-            <span className={styles.stepCount} aria-hidden="true">{finalStep ? "Your guide" : `${String(step + 1).padStart(2, "0")} / ${QUESTIONS.length}`}</span>
+            <span className={styles.progressTrack}>{[...QUESTIONS.map((item) => item.label), "Your week"].map((label, index) => <button type="button" key={label} onClick={() => moveTo(index)} aria-label={index === QUESTIONS.length ? "Your week preview" : `${label}, question ${index + 1} of ${QUESTIONS.length}`} aria-current={step === index ? "step" : undefined} className={styles.progressButton}><span data-current={step === index} data-visited={index < step} /></button>)}</span>
+            <span className={styles.stepCount} aria-hidden="true">{finalStep ? "Your week" : `${String(step + 1).padStart(2, "0")} / ${QUESTIONS.length}`}</span>
           </nav>
 
           <div className={styles.step} key={step} data-step={step}>
             <span className={styles.stepIcon}><StepIcon size={22} strokeWidth={1.4} aria-hidden="true" /></span>
             <p className={styles.eyebrow}>{finalStep ? "Your first seven days" : question.eyebrow}</p>
             <h1 ref={headingRef} id="welcome-step-title" tabIndex={-1} className={styles.title}>{finalStep ? <>A Week Shaped<br /><em>Around You.</em></> : titleCase(question.title)}</h1>
-            <p className={styles.description}>{finalStep ? chosenStartingPoints.length > 0 ? "Your first guide is ready to explore. It was assembled on this device from the preferences you chose. Every suggestion can be changed, skipped or left for another day." : "A gentle starting guide is ready to explore. You can make it your own later. Every suggestion can be changed, skipped or left for another day." : question.description}</p>
+            <p className={styles.description}>{finalStep ? chosenStartingPoints.length > 0 ? "Your first week is ready to explore. It was assembled on this device from the preferences you chose. Every suggestion can be changed, skipped or left for another day." : "A gentle starting week is ready to explore. You can make it your own later. Every suggestion can be changed, skipped or left for another day." : question.description}</p>
 
             {!finalStep && <fieldset className={styles.choices}><legend className={styles.choiceHint}>Choose one if you’d like. Every question is optional.</legend>{question.choices.map((choice) => <button type="button" key={choice.id} onClick={() => toggleChoice(choice.id)} aria-pressed={selected === choice.id} className={styles.choice} data-selected={selected === choice.id}><span className={styles.choiceCopy}><span className={styles.choiceTitle}>{choice.title}</span><span className={styles.choiceDetail}>{choice.detail}</span></span><span className={styles.choiceCheck} aria-hidden="true">{selected === choice.id && <Check size={14} strokeWidth={2} />}</span></button>)}</fieldset>}
 
@@ -107,21 +108,21 @@ export function WelcomeJourney({ onComplete, onPreview, onSignIn }: WelcomeJourn
               </div></details>}
               {personalGuide && <div className={styles.startingPoints}><p className={styles.choiceHint}>Your locally prepared week</p><h2 className={styles.guideTitle}>{titleCase(personalGuide.title)}</h2><p className={styles.guideDescription}>Seven editable suggestions, with optional space for notes:</p>{personalGuide.sections.slice(0, 3).map((section) => <p key={section.id}><Check size={14} aria-hidden="true" />{section.title}</p>)}</div>}
               {chosenStartingPoints.length > 0 && <details className={styles.preferenceSummary}><summary>Review Your {chosenStartingPoints.length} {chosenStartingPoints.length === 1 ? "Preference" : "Preferences"}</summary><dl>{chosenStartingPoints.map((point) => <div key={point.label}><dt>{point.label}</dt><dd>{point.value}</dd></div>)}</dl></details>}
-              <div className={styles.invitationCopy}><NotebookPen size={20} strokeWidth={1.5} aria-hidden="true" /><p>Preview your week without an account. After signing up and acknowledging the notices, verify your email to save a week, edit steps, and use your notes.</p></div>
-              <p className={styles.careNote}>Educational self-care, with no psychological approach imposed. Spirituality is optional and off by default. This guide does not replace professional care.</p>
+              <div className={styles.invitationCopy}><NotebookPen size={20} strokeWidth={1.5} aria-hidden="true" /><p>{testMode ? "Start a fresh test workspace to edit steps and try your notes. Everything stays in this test session. No account is created." : "Preview your week without an account. After signing up and acknowledging the notices, verify your email to save a week, edit steps, and use your notes."}</p></div>
+              <p className={styles.careNote}>Educational self-care, with no psychological approach imposed. Spirituality is optional and off by default. This planner does not replace professional care.</p>
             </div>}
 
             <div className={styles.actions}>
               <button type="button" onClick={() => moveTo(Math.max(0, step - 1))} disabled={step === 0} className={styles.back}><ArrowLeft size={16} aria-hidden="true" /> Back</button>
-              <button type="button" onClick={finalStep ? () => onComplete({ ...answers }) : () => moveTo(step + 1)} className={styles.primary}>{finalStep ? "Create my account" : "Continue"}<ArrowRight size={17} aria-hidden="true" /></button>
+              <button type="button" onClick={finalStep ? () => onComplete({ ...answers }) : () => moveTo(step + 1)} className={styles.primary}>{finalStep ? testMode ? "Start Test Workspace" : "Create my account" : "Continue"}<ArrowRight size={17} aria-hidden="true" /></button>
             </div>
-            {!finalStep ? <button type="button" onClick={() => moveTo(step + 1)} className={styles.skipStep}>Skip this question</button> : <button type="button" onClick={() => onPreview({ ...answers })} className={styles.skipStep}>Explore my guide preview</button>}
-            <p className={styles.privacyNote}>Your preferences stay in memory to prepare a guide locally. After signing up and acknowledging the notices, the derived guide can be saved on this device for your account. Verify your email to use it. Answers aren’t stored separately or sent to Firebase or AI.</p>
+            {!finalStep ? <button type="button" onClick={() => moveTo(step + 1)} className={styles.skipStep}>Skip this question</button> : <button type="button" onClick={() => onPreview({ ...answers })} className={styles.skipStep}>{testMode ? "Explore Test Workspace" : "Explore my week preview"}</button>}
+            <p className={styles.privacyNote}>{testMode ? "Your preferences prepare a week in memory for this test session. Restarting the test clears its examples. Nothing is sent to Firebase or AI." : "Your preferences stay in memory to prepare a guide locally. After signing up and acknowledging the notices, the derived week can be saved on this device for your account. Verify your email to use it. Answers aren’t stored separately or sent to Firebase or AI."}</p>
           </div></>}
         </section>
       </main>
 
-      <footer className={styles.footer}><span>Seven days. Small steps. Your pace.</span><SoundControl label />{onSignIn && <button type="button" onClick={onSignIn}>I already have an account <ArrowRight size={14} aria-hidden="true" /></button>}</footer>
+      <footer className={styles.footer}><span>Seven days. Small steps. Your pace.</span><SoundControl label />{onSignIn && <button type="button" onClick={onSignIn}>{testMode ? "Open Returning-User Test" : "I already have an account"} <ArrowRight size={14} aria-hidden="true" /></button>}</footer>
     </div>
   )
 }

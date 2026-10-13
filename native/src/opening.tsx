@@ -19,29 +19,36 @@ const leaves = [
   { x: 88, y: 56, angle: "-47deg", delay: 7000 }, { x: 116, y: 27, angle: "-13deg", delay: 7550 },
 ]
 
-export function NativeOpening({ children }: { children: React.ReactNode }) {
+export function NativeOpening({ children, replay = 0, firstVisit }: { children: React.ReactNode; replay?: number; firstVisit?: boolean }) {
+  const openingKey = `${replay}-${firstVisit === undefined ? "device" : firstVisit ? "first" : "returning"}`
+  const [completedKey, setCompletedKey] = useState<string | null>(null)
+  const finish = useCallback(() => setCompletedKey(openingKey), [openingKey])
+  const done = completedKey === openingKey || (replay > 0 && firstVisit !== true)
+  return <View style={{ flex: 1 }}><View style={{ flex: 1, display: done ? "flex" : "none" }}>{children}</View>{!done && <NativeOpeningSequence key={openingKey} firstVisit={firstVisit} onDone={finish} />}</View>
+}
+
+function NativeOpeningSequence({ firstVisit, onDone }: { firstVisit?: boolean; onDone: () => void }) {
   const [ready, setReady] = useState(false)
   const [first, setFirst] = useState(true)
   const [reduced, setReduced] = useState(false)
-  const [done, setDone] = useState(false)
   const [stem] = useState(() => new Animated.Value(0))
   const [opacity] = useState(() => new Animated.Value(1))
   const [growth] = useState(() => leaves.map(() => new Animated.Value(0)))
   const sound = useNativeSound()
   const { stop } = sound
-  const finish = useCallback(() => { stop(); setDone(true) }, [stop])
+  const finish = useCallback(() => { stop(); onDone() }, [stop, onDone])
   useEffect(() => {
     let alive = true
-    void Promise.all([AsyncStorage.getItem("anew-native-opened-v1"), AccessibilityInfo.isReduceMotionEnabled()]).then(([seen, reduce]) => {
+    void Promise.all([firstVisit === undefined ? AsyncStorage.getItem("anew-native-opened-v1") : Promise.resolve(null), AccessibilityInfo.isReduceMotionEnabled()]).then(([seen, reduce]) => {
       if (!alive) return
-      setFirst(!seen); setReduced(reduce); setReady(true)
-      void AsyncStorage.setItem("anew-native-opened-v1", "1").catch(() => {})
+      setFirst(firstVisit ?? !seen); setReduced(reduce); setReady(true)
+      if (firstVisit === undefined) void AsyncStorage.setItem("anew-native-opened-v1", "1").catch(() => {})
     }).catch(() => { if (alive) { setReduced(true); setReady(true) } })
     const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduced)
     return () => { alive = false; sub.remove() }
-  }, [])
+  }, [firstVisit])
   useEffect(() => {
-    if (!ready || done) return
+    if (!ready) return
     const length = reduced ? 100 : first ? 9200 : 1400
     if (first && !reduced) {
       Animated.timing(stem, { toValue: 1, duration: 8100, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE_DRIVER }).start()
@@ -54,9 +61,8 @@ export function NativeOpening({ children }: { children: React.ReactNode }) {
       Animated.timing(opacity, { toValue: 0, duration: reduced ? 0 : 350, useNativeDriver: NATIVE_DRIVER }).start(({ finished }) => { if (finished) finish() })
     }, Math.max(0, length - 350))
     return () => { clearTimeout(timer); stem.stopAnimation(); growth.forEach(v => v.stopAnimation()); opacity.stopAnimation() }
-  }, [ready, first, reduced, done, stem, growth, opacity, finish])
-  if (done) return children
-  return <Animated.View style={[styles.screen, { opacity }]}>
+  }, [ready, first, reduced, stem, growth, opacity, finish])
+  return <Animated.View style={[styles.screen, StyleSheet.absoluteFill, { opacity }]}>
     <View style={styles.paper} accessibilityLabel={first ? "A branch slowly growing leaves" : "Anew leaf on ivory paper"}>
       <View style={styles.paperLine} />
       {first && !reduced ? <View style={{ width: 250, height: 300 }}>

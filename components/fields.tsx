@@ -6,39 +6,41 @@ import { useStore } from "@/lib/store"
 import { titleCase } from "@/lib/title-case"
 
 export function TextField({ id, label }: { id: string; label: string }) {
-  const { getText, setText } = useStore()
+  const { getText, setText, locale } = useStore()
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-foreground">{titleCase(label)}</span>
       <input
         type="text"
+        placeholder={locale === "en-US" ? "For example: a quiet break after lunch" : "Exemplo: uma pausa tranquila depois do almoço"}
         value={getText(id)}
         onChange={(e) => setText(id, e.target.value)}
         /* font-size 1rem (16px) prevents iOS auto-zoom */
-        className="w-full rounded-md border border-input bg-card px-3 py-2 text-base text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-input bg-card px-3 py-2 text-base text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
       />
     </label>
   )
 }
 
 export function TextAreaField({ id, label }: { id: string; label: string }) {
-  const { getText, setText } = useStore()
+  const { getText, setText, locale } = useStore()
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-foreground">{titleCase(label)}</span>
       <textarea
+        placeholder={locale === "en-US" ? "For example: I would like a little more time to rest and read." : "Exemplo: gostaria de um pouco mais de tempo para descansar e ler."}
         value={getText(id)}
         onChange={(e) => setText(id, e.target.value)}
         rows={3}
         /* font-size 1rem (16px) prevents iOS auto-zoom */
-        className="w-full resize-y rounded-md border border-input bg-card px-3 py-2 text-base leading-relaxed text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 resize-y rounded-md border border-input bg-card px-3 py-2 text-base leading-relaxed text-foreground shadow-xs outline-none transition focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/30"
       />
     </label>
   )
 }
 
 export function ScaleField({ id, label, max = 10 }: { id: string; label: string; max?: number }) {
-  const { getText, setText } = useStore()
+  const { getText, setText, locale } = useStore()
   const current = getText(id)
   const values = Array.from({ length: max + 1 }, (_, i) => i)
   return (

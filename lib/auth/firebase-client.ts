@@ -12,6 +12,7 @@ const config = {
 }
 
 export const authConfigured = Object.values(config).every((value) => !!value && !value.includes("your-") && !value.includes("<"))
+export const googleAuthConfigured = authConfigured && process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true"
 let persistence: Promise<void> | null = null
 
 export function getFirebaseServices() {

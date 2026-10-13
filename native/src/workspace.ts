@@ -1,7 +1,7 @@
 import { DEFAULT_GUIDE_TEMPLATE_EN, GUIDE_TEMPLATES, type GuideTemplate } from "../../lib/guide-data"
 import { isValidBackup, isValidDate, isValidGuide } from "../../lib/backup-validation"
 import { calculateInclusiveEndDate, getTodayFormatted } from "../../lib/date-utils"
-import { createDemoBackup } from "../../lib/demo-data"
+import { createDemoBackup, type DemoScenario } from "../../lib/demo-data"
 import { createStarterGuide } from "../../lib/planner"
 
 export type Activity = GuideTemplate["weeklyPlan"][number]
@@ -96,7 +96,8 @@ export function createBlankWorkspace(guide = createStarterGuide()): NativeWorksp
   return { schemaVersion: 4, locale: "en-US", bibleVersion: "KJV", guides: [ownGuide], activeGuideId: ownGuide.id, weeks: [week], activeWeekId: week.id, theme: "light", resourceFavorites: [] }
 }
 
-export function createNativeDemoWorkspace(guide?: GuideTemplate): NativeWorkspace {
+export function createNativeDemoWorkspace(guide?: GuideTemplate, scenario: DemoScenario = "returning-user"): NativeWorkspace {
+  if (scenario === "first-visit") return { ...createBlankWorkspace(guide ?? createStarterGuide()), starterPreview: true }
   return { ...createDemoBackup(guide ?? createStarterGuide()), theme: "light", resourceFavorites: [] }
 }
 

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { EmailAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, deleteUser, getAdditionalUserInfo, onAuthStateChanged, reauthenticateWithCredential, reauthenticateWithPopup, reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut as firebaseSignOut, validatePassword, type User } from "firebase/auth"
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore"
 import { hasCurrentLegalAcceptance, LEGAL_VERSION } from "@/lib/legal"
-import { authConfigured, getFirebaseServices, prepareAuth } from "./firebase-client"
+import { authConfigured, googleAuthConfigured, getFirebaseServices, prepareAuth } from "./firebase-client"
 import { SessionGuard, type SessionTicket } from "./session-guard"
 import { isNativePlatform } from "@/lib/platform"
 import { ensureExistingGoogleAccount, performAccountDeletion, type AccountDeletionResult } from "./account-deletion"
@@ -15,6 +15,7 @@ type AuthValue = {
   status: "loading" | "guest" | "authenticated"
   user: AccountSnapshot | null
   configured: boolean
+  googleConfigured: boolean
   pendingVerification: boolean
   legalAccepted: boolean
   error: string | null
@@ -44,6 +45,7 @@ const safeMessage = (error: unknown) => {
     case "AGREEMENTS_REQUIRED": return "Read and confirm the terms, health notice, privacy acknowledgement and adult age requirement."
     case "AUTH_REQUIRED": return "Sign in to your account to continue."
     case "OAUTH_NATIVE_UNAVAILABLE": return "Google sign-in is not available in the installed app yet. Use email and password."
+    case "GOOGLE_AUTH_NOT_CONFIGURED": return "Google sign-in is not available yet. Use email and password."
     case "PASSWORD_POLICY": return "Use at least 12 characters and meet the service's password requirements."
     case "auth/invalid-email": return "Check the email address format."
     case "auth/too-many-requests": return "Too many attempts. Please wait before trying again."
@@ -203,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const signInGoogle = (agreements?: Agreements) => run(async () => {
     if (isNativePlatform()) throw new Error("OAUTH_NATIVE_UNAVAILABLE")
+    if (!googleAuthConfigured) throw new Error("GOOGLE_AUTH_NOT_CONFIGURED")
     if (!allAgreed(agreements)) throw new Error("AGREEMENTS_REQUIRED")
     const auth = await prepareAuth()
     const provider = new GoogleAuthProvider()
@@ -215,6 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const signInGoogleForDeletion = () => run(async () => {
     if (isNativePlatform()) throw new Error("OAUTH_NATIVE_UNAVAILABLE")
+    if (!googleAuthConfigured) throw new Error("GOOGLE_AUTH_NOT_CONFIGURED")
     const auth = await prepareAuth()
     const provider = new GoogleAuthProvider()
     provider.setCustomParameters({ prompt: "select_account" })
@@ -317,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   })
 
-  return <AuthContext.Provider value={{ status, user, configured: authConfigured, pendingVerification: !!user && !user.emailVerified,
+  return <AuthContext.Provider value={{ status, user, configured: authConfigured, googleConfigured: googleAuthConfigured, pendingVerification: !!user && !user.emailVerified,
     legalAccepted, error, busy, signIn, signUp, signInGoogle, signInGoogleForDeletion, signOut, resetPassword, resendVerification, refreshVerification,
     acceptAgreements, deleteAccount, deletionResult, clearError: () => setError(null) }}>{children}</AuthContext.Provider>
 }

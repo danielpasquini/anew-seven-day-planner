@@ -40,9 +40,10 @@ function GrowingBranch() {
 
 export function LaunchExperience() {
   const demo = useDemo()
-  const { user, status, legalAccepted } = useAuth()
+  const { user: accountUser, status, legalAccepted } = useAuth()
+  const user = demo.enabled ? null : accountUser
   const fullAccess = status === "authenticated" && user?.emailVerified && legalAccepted
-  const [phase, setPhase] = useState<"opening" | "journey" | "app">("opening")
+  const [phase, setPhase] = useState<"opening" | "journey" | "app">(demo.scenario === "returning-user" ? "app" : "opening")
   const [firstVisit, setFirstVisit] = useState(true)
   const [introPending, setIntroPending] = useState(true)
   const [loaded, setLoaded] = useState(false)
@@ -52,16 +53,17 @@ export function LaunchExperience() {
   const personalOwnerRef = useRef<string | null>(null)
   useEffect(() => {
     try {
-      setFirstVisit(localStorage.getItem(FIRST_OPEN) !== "seen")
-      setIntroPending(localStorage.getItem(INTRO_SEEN) !== "seen")
-      localStorage.setItem(FIRST_OPEN, "seen")
-      const theme = localStorage.getItem("guia-theme")
+      const storage = demo.enabled ? demo.demoStorage : localStorage
+      setFirstVisit(storage?.getItem(FIRST_OPEN) !== "seen")
+      setIntroPending(storage?.getItem(INTRO_SEEN) !== "seen")
+      storage?.setItem(FIRST_OPEN, "seen")
+      const theme = storage?.getItem("guia-theme")
       document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches))
     } catch { /* The introduction stays skippable when storage is blocked. */ }
     setLoaded(true)
   }, [])
   const enter = (mode: "login" | "register" | "preview", answers?: OnboardingAnswers) => {
-    try { localStorage.setItem(INTRO_SEEN, "seen") } catch {}
+    try { (demo.enabled ? demo.demoStorage : localStorage)?.setItem(INTRO_SEEN, "seen") } catch {}
     setPreview(mode === "preview")
     setAuthMode(mode === "register" ? "register" : "login")
     personalOwnerRef.current = null
@@ -92,14 +94,14 @@ export function LaunchExperience() {
     const timer = window.setTimeout(() => setPhase(introPending && !user ? "journey" : "app"), reduced ? 100 : firstVisit ? 9200 : 1400)
     return () => window.clearTimeout(timer)
   }, [loaded, firstVisit, introPending, user, phase])
-  if (phase === "opening") return <main className="anew-opening" aria-label="Anew is opening">
+  if (phase === "opening") return <main className="anew-opening" tabIndex={-1} aria-label="Anew is opening">
     <div className="anew-opening-paper">{loaded && (firstVisit ? <GrowingBranch /> : <BrandMark paper className="anew-returning-leaf size-28 text-primary" />)}<span className="anew-paper-corner" aria-hidden="true" /></div>
     <h1 className="mt-7 font-serif text-5xl font-medium tracking-[-.045em] text-primary">Anew<span className="text-gold">.</span></h1>
     <p className="mt-3 text-sm text-muted-foreground">Seven days. Small steps. Your pace.</p>
     <div className="mt-5"><SoundControl label /></div>
     <button className="mt-8 min-h-11 rounded-xl px-4 text-xs text-muted-foreground hover:bg-primary/5" onClick={() => setPhase(introPending && !user ? "journey" : "app")}>Skip animation</button>
   </main>
-  if (phase === "journey") return <WelcomeJourney onComplete={(answers) => enter("register", answers)} onPreview={(answers) => enter("preview", answers)} onSignIn={() => enter("login")} />
+  if (phase === "journey") return <WelcomeJourney testMode={demo.enabled} onComplete={(answers) => enter("register", answers)} onPreview={(answers) => enter("preview", answers)} onSignIn={() => demo.enabled ? demo.startDemo() : enter("login")} />
   const accountGuide = !personalOwnerRef.current || personalOwnerRef.current === user?.uid ? personalGuide : null
-  return <div className="anew-screen-enter"><StoreProvider key={demo.enabled ? demo.sessionId : fullAccess ? user.uid : "preview"} initialGuide={accountGuide}><GuideApp initialPreview={preview} initialAuthMode={authMode} previewGuide={accountGuide} onPersonalize={() => setPhase("journey")} /></StoreProvider></div>
+  return <div className={demo.enabled ? undefined : "anew-screen-enter"}><StoreProvider key={demo.enabled ? demo.sessionId : fullAccess ? user.uid : "preview"} initialGuide={accountGuide}><GuideApp initialPreview={preview} initialAuthMode={authMode} previewGuide={accountGuide} onPersonalize={() => setPhase("journey")} /></StoreProvider></div>
 }

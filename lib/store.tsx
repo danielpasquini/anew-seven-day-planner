@@ -15,7 +15,11 @@ import { getDictionary, type TranslationDictionary } from "@/lib/i18n"
 import { BibleProvider, type BibleVersion } from "@/lib/bible/bible-provider"
 import { SyncEngine, type SyncStatus } from "@/lib/sync/sync-engine"
 import { isValidActivity, isValidBackup, isValidDate, isValidGuide } from "@/lib/backup-validation"
-import { createStarterGuide, reviseGuideSections } from "@/lib/planner"
+import { createStarterGuide } from "@/lib/planner"
+import { createWeekFromGuide, reviseGuideInWorkspace, sectionsForWeek, type GuideUpdates } from "@/lib/guide-revision"
+import { createPlannedWeekInWorkspace, navigationForWeeks, updateWeekPlanInWorkspace, type WeekPlanUpdates } from "@/lib/week-planning"
+import type { WeekSetup } from "@/lib/week-setup"
+export type { WeekSetup } from "@/lib/week-setup"
 import { useAuth } from "@/lib/auth/client"
 import { getAuthToken } from "@/lib/auth/firebase-client"
 import { apiUrl } from "@/lib/api-url"
@@ -182,6 +186,7 @@ export type WeekInstance = {
   createdAt: string // ISO date string
   updatedAt: string // ISO date string
   status: WeekStatus
+  setup?: WeekSetup
   completedAt?: string | null
   completionSnapshot?: CompletionSnapshot | null
   aiReview?: AIReview | null
@@ -211,7 +216,9 @@ type StoreValue = {
   selectGuide: (id: string) => void
   addGuide: (guide: GuideTemplate) => void
   saveAndActivateGuide: (guide: GuideTemplate) => void
-  updateGuideSections: (sections: Section[]) => boolean
+  updateGuide: (guideId: string, updates: GuideUpdates) => boolean
+  updateWeekPlan: (weekId: string, updates: WeekPlanUpdates) => boolean
+  updateWeekSections: (weekId: string, sections: Section[]) => boolean
   starterIsPreview: boolean
   useStarterWeek: () => void
   weeks: WeekInstance[]
@@ -219,6 +226,7 @@ type StoreValue = {
   activeWeekId: string | null
   selectWeek: (id: string) => void
   createWeek: (customTitle?: string, customStartDate?: string, templateId?: string) => void
+  createPlannedWeek: (setup: WeekSetup, title?: string, startDate?: string) => boolean
   deleteWeek: (id: string) => void
   updateWeekMeta: (id: string, updates: { title?: string; startDate?: string }) => void
   completeWeek: (id: string) => Promise<void>
@@ -594,12 +602,12 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
               id: guideTpl.id,
               title: guideTpl.title,
               version: guideVersion,
-              completionConfig: guideTpl.completionConfig,
+              completionConfig: JSON.parse(JSON.stringify(guideTpl.completionConfig)),
               theologyEnabled: guideTpl.theologyEnabled,
               contentLocale: guideTpl.contentLocale,
               bibleVersion: guideTpl.bibleVersion,
             }
-            const snapshotWithSections = { ...guideSnapshot, sections: guideSnapshot.sections || guideTpl.sections }
+            const snapshotWithSections = JSON.parse(JSON.stringify({ ...guideSnapshot, sections: guideSnapshot.sections ?? guideTpl.sections }))
 
             return {
               ...w,
@@ -636,8 +644,8 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           setReady(true)
           return
         }
-      } else if (fullAccess && user) {
-        const personalGuide = initialGuideRef.current || readOnboardingGuide(storage, user.uid)
+      } else if (fullAccess && (user || demoMode)) {
+        const personalGuide = initialGuideRef.current || (user ? readOnboardingGuide(storage, user.uid) : null)
         if (personalGuide) {
           isStarter = personalGuide.id.startsWith("anew-starter-")
           startingGuide = personalGuide
@@ -664,11 +672,11 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           id: startingGuide.id,
           title: startingGuide.title,
           version: startingGuide.version,
-          completionConfig: startingGuide.completionConfig,
+          completionConfig: JSON.parse(JSON.stringify(startingGuide.completionConfig)),
           theologyEnabled: startingGuide.theologyEnabled,
           contentLocale: startingGuide.contentLocale,
           bibleVersion: startingGuide.bibleVersion,
-          sections: startingGuide.sections,
+          sections: JSON.parse(JSON.stringify(startingGuide.sections)),
         },
         title: "Week 1",
         startDate: today,
@@ -726,12 +734,20 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
     )
   }, [weeks])
 
+  const navigation = useMemo(() => navigationForWeeks(sortedWeeks, activeWeekId), [sortedWeeks, activeWeekId])
+  const activeWeek = navigation.activeWeek
   const activeGuide = useMemo(() => {
-    const guide = guides.find((g) => g.id === activeGuideId) || guides[0] || DEFAULT_GUIDE_TEMPLATE_EN
-    const week = weeks.find((w) => w.id === activeWeekId && w.guideId === guide.id)
-      ?? weeks.find((w) => w.guideId === guide.id)
-    return week?.guideSnapshot?.sections ? { ...guide, sections: week.guideSnapshot.sections } : guide
-  }, [guides, activeGuideId, weeks, activeWeekId])
+    const template = guides.find((guide) => guide.id === (activeWeek?.guideId ?? activeGuideId)) || guides[0] || DEFAULT_GUIDE_TEMPLATE_EN
+    const snapshot = activeWeek?.guideSnapshot
+    return activeWeek ? { ...template,
+      title: snapshot?.title ?? template.title, sections: snapshot?.sections ?? template.sections,
+      completionConfig: snapshot?.completionConfig ?? template.completionConfig,
+      theologyEnabled: snapshot?.theologyEnabled ?? template.theologyEnabled,
+      contentLocale: snapshot?.contentLocale ?? template.contentLocale,
+      bibleVersion: snapshot?.bibleVersion !== undefined ? snapshot.bibleVersion : template.bibleVersion,
+      weeklyPlan: activeWeek.programacao.activities,
+    } : template
+  }, [guides, activeGuideId, activeWeek])
 
   const useStarterWeek = useCallback(() => {
     if (!canEdit || !starterPreviewRef.current) return
@@ -763,86 +779,75 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
   const saveAndActivateGuide = useCallback((newGuide: GuideTemplate) => {
       if (!workspaceActiveRef.current || storageBlockedRef.current || deletionSuspendedRef.current || !isValidGuide(newGuide)) return
       const wasPreview = starterPreviewRef.current
-      starterPreviewRef.current = false
-      setStarterIsPreview(false)
       const updatedGuides = [...guidesRef.current.filter((g) => g.id !== newGuide.id && (!wasPreview || g.id !== activeGuideId)), newGuide]
-      setActiveGuideId(newGuide.id)
 
       const today = getTodayFormatted()
       const nowIso = new Date().toISOString()
-      const endDate = calculateInclusiveEndDate(today)
       const newWeekId = generateWeekId()
-      const initialData = { text: {}, done: {} }
-      const acts = newGuide.weeklyPlan || getDefaultScheduleActivities()
-
-      const newWeek: WeekInstance = {
-        id: newWeekId,
-        guideId: newGuide.id,
-        templateId: newGuide.id,
-        guideVersion: newGuide.version || 1,
-        guideSnapshot: {
-          id: newGuide.id,
-          title: newGuide.title,
-          version: newGuide.version || 1,
-          completionConfig: newGuide.completionConfig,
-          theologyEnabled: newGuide.theologyEnabled,
-          contentLocale: newGuide.contentLocale,
-          bibleVersion: newGuide.bibleVersion,
-          sections: newGuide.sections,
-        },
-        title: newGuide.contentLocale === "en-US" ? "Week 1" : "Semana 1",
-        startDate: today,
-        endDate,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        status: "active",
-        completedAt: null,
-        completionSnapshot: null,
-        aiReview: null,
-        aiReviewVersion: 1,
-        aiReviewOutdated: false,
-        data: initialData,
-        programacao: {
-          dias: 7,
-          activities: acts,
-        },
-        progresso: computeProgress(initialData, acts),
-      }
+      const newWeek = createWeekFromGuide(updatedGuides, newGuide.id, {
+        id: newWeekId, title: newGuide.contentLocale === "en-US" ? "Week 1" : "Semana 1",
+        startDate: today, createdAt: nowIso,
+      })
+      if (!newWeek) return
 
       const nextWeeks = [...(wasPreview ? [] : weeksRef.current), newWeek]
+      starterPreviewRef.current = false
+      setStarterIsPreview(false)
       setGuides(updatedGuides)
+      setActiveGuideId(newGuide.id)
       setWeeks(nextWeeks)
       setActiveWeekId(newWeekId)
       persist(nextWeeks, newWeekId, updatedGuides, newGuide.id)
-  }, [guides, weeks, activeGuideId, computeProgress, persist])
+  }, [activeGuideId, persist])
 
-  const updateGuideSections = useCallback((nextSections: Section[]) => {
-    if (!canEdit) return false
-    if (weeks.find((week) => week.id === activeWeekId)?.status === "completed") return false
-    const source = guides.find((guide) => guide.id === activeGuideId)
-    if (!source) return false
-    const revised = reviseGuideSections(source, nextSections)
-    if (!revised) return false
-    const nextGuides = guides.map((guide) => guide.id === source.id ? revised : guide)
-    const now = new Date().toISOString()
-    const nextWeeks = weeks.map((week) => week.id === activeWeekId && week.status === "active" ? {
-      ...week, guideVersion: revised.version, updatedAt: now,
-        guideSnapshot: { ...week.guideSnapshot, id: revised.id, title: revised.title, version: revised.version,
-        completionConfig: revised.completionConfig, theologyEnabled: revised.theologyEnabled,
-        contentLocale: revised.contentLocale, bibleVersion: revised.bibleVersion, sections: revised.sections },
-    } : week)
+  const updateGuide = useCallback((guideId: string, updates: GuideUpdates) => {
+    if (!canEdit || !workspaceActiveRef.current || storageBlockedRef.current
+      || deletionSuspendedRef.current || starterPreviewRef.current) return false
+    const revision = reviseGuideInWorkspace({ guides: guidesRef.current, weeks: weeksRef.current },
+      guideId, updates, new Date().toISOString())
+    if (!revision) return false
+    setGuides(revision.guides)
+    persist(revision.weeks, activeWeekId, revision.guides, activeGuideId)
+    return true
+  }, [canEdit, activeGuideId, activeWeekId, persist])
+
+  const guideWeeks = sortedWeeks
+
+  const createPlannedWeek = useCallback((setup: WeekSetup, title?: string, startDate?: string) => {
+    if (!canEdit || !workspaceActiveRef.current || storageBlockedRef.current || deletionSuspendedRef.current) return false
+    const sourceWeeks = starterPreviewRef.current ? [] : weeksRef.current
+    const next = createPlannedWeekInWorkspace({ guides: guidesRef.current, weeks: sourceWeeks,
+      activeGuideId, activeWeekId: starterPreviewRef.current ? null : activeWeek?.id ?? null }, setup, {
+      id: generateWeekId(), guideId: `planner-${generateWeekId()}`, createdAt: new Date().toISOString(),
+      today: getTodayFormatted(), locale, title, startDate,
+    })
+    if (!next) return false
     starterPreviewRef.current = false
     setStarterIsPreview(false)
-    setGuides(nextGuides)
-    setWeeks(nextWeeks)
-    persist(nextWeeks, activeWeekId, nextGuides, activeGuideId)
+    setGuides(next.guides)
+    setWeeks(next.weeks)
+    setActiveWeekId(next.newWeek.id)
+    setActiveGuideId(next.newWeek.guideId)
+    persist(next.weeks, next.newWeek.id, next.guides, next.newWeek.guideId)
     return true
-  }, [canEdit, guides, activeGuideId, weeks, activeWeekId, persist])
+  }, [canEdit, activeGuideId, activeWeek, locale, persist])
 
-  const guideWeeks = useMemo(() => sortedWeeks.filter((w) => w.guideId === activeGuideId), [sortedWeeks, activeGuideId])
-  const activeWeek = useMemo(() => {
-    return guideWeeks.find((w) => w.id === activeWeekId) ?? guideWeeks[0] ?? null
-  }, [guideWeeks, activeWeekId])
+  const updateWeekPlan = useCallback((weekId: string, updates: WeekPlanUpdates) => {
+    if (!canEdit || !workspaceActiveRef.current || storageBlockedRef.current
+      || deletionSuspendedRef.current || starterPreviewRef.current) return false
+    const next = updateWeekPlanInWorkspace({ guides: guidesRef.current, weeks: weeksRef.current,
+      activeGuideId, activeWeekId }, weekId, updates, new Date().toISOString())
+    if (!next) return false
+    setWeeks(next.weeks)
+    persist(next.weeks, activeWeekId, next.guides, activeGuideId)
+    return true
+  }, [canEdit, activeGuideId, activeWeekId, persist])
+
+  const updateWeekSections = useCallback((weekId: string, nextSections: Section[]) => {
+    const target = weeksRef.current.find((week) => week.id === weekId)
+    if (!target) return false
+    return updateWeekPlan(weekId, { title: target.title, sections: nextSections, weeklyPlan: target.programacao.activities })
+  }, [updateWeekPlan])
 
   const selectWeek = useCallback(
     (id: string) => {
@@ -860,12 +865,14 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
 
   const createWeek = useCallback(
     (customTitle?: string, customStartDate?: string, templateId = activeGuideId) => {
+      if (!canEdit || !workspaceActiveRef.current || storageBlockedRef.current || deletionSuspendedRef.current) return
+      if (!guidesRef.current.some((guide) => guide.id === templateId)) return
       let startDate = customStartDate?.trim() || ""
       if (startDate && !isValidDate(startDate)) return
       if (customTitle !== undefined && customTitle.trim().length > 500) return
 
       setWeeks((prevWeeks) => {
-        const sorted = prevWeeks.filter((w) => w.guideId === templateId).sort((a, b) =>
+        const sorted = [...prevWeeks].sort((a, b) =>
           a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
         )
 
@@ -884,55 +891,23 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
         const title = customTitle?.trim() || `${locale === "en-US" ? "Week" : "Semana"} ${weekNumber}`
         const newId = generateWeekId()
         const nowIso = new Date().toISOString()
-        const initialData = { text: {}, done: {} }
-        const defaultActs = getDefaultScheduleActivities()
-
-        const targetGuide = guides.find((g) => g.id === templateId) || activeGuide || DEFAULT_GUIDE_TEMPLATE
-        const newWeek: WeekInstance = {
-          id: newId,
-          guideId: targetGuide.id,
-          templateId: targetGuide.id,
-          guideVersion: targetGuide.version || 1,
-          guideSnapshot: {
-            id: targetGuide.id,
-            title: targetGuide.title,
-            version: targetGuide.version || 1,
-            completionConfig: targetGuide.completionConfig,
-            theologyEnabled: targetGuide.theologyEnabled,
-            contentLocale: targetGuide.contentLocale,
-            bibleVersion: targetGuide.bibleVersion,
-            sections: targetGuide.sections,
-          },
-          title,
-          startDate,
-          endDate,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-          status: "active",
-          completedAt: null,
-          completionSnapshot: null,
-          aiReview: null,
-          aiReviewVersion: 1,
-          aiReviewOutdated: false,
-          data: initialData,
-          programacao: {
-            dias: 7,
-            activities: targetGuide.weeklyPlan || defaultActs,
-          },
-          progresso: computeProgress(initialData, targetGuide.weeklyPlan || defaultActs),
-        }
+        const currentGuides = guidesRef.current
+        const newWeek = createWeekFromGuide(currentGuides, templateId, { id: newId, title, startDate, createdAt: nowIso })
+        if (!newWeek) return prevWeeks
 
         const updatedWeeks = [...prevWeeks, newWeek].sort((a, b) =>
           a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
         )
 
+        starterPreviewRef.current = false
+        setStarterIsPreview(false)
         setActiveWeekId(newId)
-        setActiveGuideId(targetGuide.id)
-        persist(updatedWeeks, newId, guides, targetGuide.id)
+        setActiveGuideId(newWeek.guideId)
+        persist(updatedWeeks, newId, currentGuides, newWeek.guideId)
         return updatedWeeks
       })
     },
-    [guides, activeGuide, activeGuideId, locale, computeProgress, persist]
+    [activeGuideId, canEdit, locale, persist]
   )
 
   const deleteWeek = useCallback(
@@ -942,41 +917,11 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
         if (remaining.length === 0) {
           const today = getTodayFormatted()
           const nowIso = new Date().toISOString()
-          const emptyData = { text: {}, done: {} }
-          const defaultActs = activeGuide.weeklyPlan.map((activity) => ({ ...activity }))
-          const defaultWeek: WeekInstance = {
-            id: generateWeekId(),
-            guideId: activeGuide.id,
-            templateId: activeGuide.id,
-            guideVersion: activeGuide.version,
-            guideSnapshot: {
-              id: activeGuide.id,
-              title: activeGuide.title,
-              version: activeGuide.version,
-              completionConfig: activeGuide.completionConfig,
-              theologyEnabled: activeGuide.theologyEnabled,
-              contentLocale: activeGuide.contentLocale,
-              bibleVersion: activeGuide.bibleVersion,
-              sections: activeGuide.sections,
-            },
-            title: locale === "en-US" ? "Week 1" : "Semana 1",
-            startDate: today,
-            endDate: calculateInclusiveEndDate(today),
-            createdAt: nowIso,
-            updatedAt: nowIso,
-            status: "active",
-            completedAt: null,
-            completionSnapshot: null,
-            aiReview: null,
-            aiReviewVersion: 1,
-            aiReviewOutdated: false,
-            data: emptyData,
-            programacao: {
-              dias: 7,
-              activities: defaultActs,
-            },
-            progresso: computeProgress(emptyData, defaultActs),
-          }
+          const defaultWeek = createWeekFromGuide(guidesRef.current, activeGuideId, {
+            id: generateWeekId(), title: locale === "en-US" ? "Week 1" : "Semana 1",
+            startDate: today, createdAt: nowIso,
+          })
+          if (!defaultWeek) return prevWeeks
           setActiveWeekId(defaultWeek.id)
           persist([defaultWeek], defaultWeek.id)
           return [defaultWeek]
@@ -986,16 +931,15 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
         )
 
-        setActiveWeekId((currentActive) => {
-          const nextActiveId = currentActive === id ? sortedRemaining.find((w) => w.guideId === activeGuideId)?.id ?? null : currentActive
-          persist(sortedRemaining, nextActiveId)
-          return nextActiveId
-        })
+        const nextActive = sortedRemaining.find((week) => week.id === activeWeekId) ?? sortedRemaining[0]
+        setActiveWeekId(nextActive.id)
+        setActiveGuideId(nextActive.guideId)
+        persist(sortedRemaining, nextActive.id, guidesRef.current, nextActive.guideId)
 
         return sortedRemaining
       })
     },
-    [computeProgress, persist, activeGuide, activeGuideId, locale]
+    [persist, activeGuideId, activeWeekId, locale]
   )
 
   const updateWeekMeta = useCallback(
@@ -1510,7 +1454,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
 
     md += `---\n\n`
     md += `### ${isEn ? "Guide Records & Responses" : "Registros e Respostas do Guia"}\n\n`
-    activeGuide.sections.forEach((s) => {
+    sectionsForWeek(activeWeek, activeGuide).forEach((s) => {
       md += `#### ${isEn ? "Section" : "Seção"} ${s.number}: ${s.title}\n\n`
       s.blocks.forEach((block) => {
         if (block.type === "fields" && block.fields) {
@@ -1657,7 +1601,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             id: guideTpl.id,
             title: guideTpl.title,
             version: guideVersion,
-            completionConfig: guideTpl.completionConfig,
+            completionConfig: JSON.parse(JSON.stringify(guideTpl.completionConfig)),
             theologyEnabled: guideTpl.theologyEnabled,
             contentLocale: guideTpl.contentLocale,
             bibleVersion: guideTpl.bibleVersion,
@@ -1668,7 +1612,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             guideId,
             templateId: guideId,
             guideVersion,
-            guideSnapshot: { ...guideSnapshot, sections: guideSnapshot.sections || guideTpl.sections },
+            guideSnapshot: JSON.parse(JSON.stringify({ ...guideSnapshot, sections: guideSnapshot.sections ?? guideTpl.sections })),
             status: w.status || "active",
             completedAt: w.completedAt || null,
             completionSnapshot: w.completionSnapshot || null,
@@ -1746,14 +1690,17 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       selectGuide,
       addGuide: canEdit ? addGuide : () => {},
       saveAndActivateGuide: canEdit ? saveAndActivateGuide : () => {},
-      updateGuideSections,
+      updateGuide,
+      updateWeekPlan,
+      updateWeekSections,
       starterIsPreview,
       useStarterWeek,
       weeks: sortedWeeks,
       activeWeek,
       activeWeekId: activeWeek?.id ?? null,
       selectWeek,
-      createWeek: canEdit ? (...args) => { useStarterWeek(); createWeek(...args) } : () => {},
+      createWeek: canEdit ? createWeek : () => {},
+      createPlannedWeek,
       deleteWeek: canEdit ? (...args) => { useStarterWeek(); deleteWeek(...args) } : () => {},
       updateWeekMeta: canEdit ? (...args) => { useStarterWeek(); updateWeekMeta(...args) } : () => {},
       completeWeek: canEdit ? (...args) => { useStarterWeek(); return completeWeek(...args) } : async () => {},
@@ -1802,13 +1749,16 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       selectGuide,
       addGuide,
       saveAndActivateGuide,
-      updateGuideSections,
+      updateGuide,
+      updateWeekPlan,
+      updateWeekSections,
       starterIsPreview,
       useStarterWeek,
       sortedWeeks,
       activeWeek,
       selectWeek,
       createWeek,
+      createPlannedWeek,
       deleteWeek,
       updateWeekMeta,
       completeWeek,

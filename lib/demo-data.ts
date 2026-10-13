@@ -1,4 +1,5 @@
 import type { GuideTemplate } from "./guide-data"
+import type { WeekSetup } from "./week-setup"
 import { createStarterGuide, buildPresetGuide } from "./planner"
 import { isValidGuide } from "./backup-validation"
 import { calculateInclusiveEndDate, getTodayFormatted } from "./date-utils"
@@ -9,6 +10,7 @@ export type DemoWeek = {
   guideSnapshot?: { id: string; title: string; version: number; completionConfig: GuideTemplate["completionConfig"]; theologyEnabled?: boolean; contentLocale?: "en-US" | "pt-BR"; bibleVersion?: "ARA" | "NVT" | "KJV" | "NIV" | null; sections?: GuideTemplate["sections"] } | null
   title: string; startDate: string; endDate: string; createdAt: string; updatedAt: string
   status: "active" | "completed"; completedAt?: string | null
+  setup?: WeekSetup
   completionSnapshot?: { totalTasks: number; completedTasks: number; completionPercentage: number; completedAt: string; taskResults: { id: string; description: string; time?: string; dayIndex: number; done: boolean; countsTowardCompletion: boolean }[] } | null
   aiReview?: { verdict: string; summary: string; whatWorked: string[]; difficulties: string[]; observedPatterns: string[]; nextWeekSuggestions: string[]; generatedAt: string; analysisVersion: number } | null
   aiReviewVersion?: number; aiReviewOutdated?: boolean
@@ -128,7 +130,8 @@ export function createDemoBackup(initialGuide?: GuideTemplate, today = getTodayF
   return { schemaVersion: 4, locale: "en-US", bibleVersion: "KJV", guides: [primary, secondary], activeGuideId: primary.id, weeks, activeWeekId: "demo-week-current" }
 }
 
-export type DemoSession = Readonly<{ id: string; storageKey: string; storage: MemoryDemoStorage }>
+export type DemoScenario = "first-visit" | "returning-user"
+export type DemoSession = Readonly<{ id: string; storageKey: string; storage: MemoryDemoStorage; scenario: DemoScenario }>
 
 /** Pure lifecycle used by the provider and tested without Firebase or a browser. */
 export class DemoSessionController {
@@ -136,21 +139,24 @@ export class DemoSessionController {
   private seedGuide: GuideTemplate | undefined
   private serial = 0
 
-  constructor(readonly available: boolean) {}
+  constructor(readonly available: boolean, private readonly beforeStart: () => boolean = () => true) {}
   get session(): DemoSession | null { return this.current }
-  start(initialGuide?: GuideTemplate): DemoSession | null {
-    if (!this.available) return null
+  start(initialGuide?: GuideTemplate, scenario: DemoScenario = "returning-user"): DemoSession | null {
+    if (!this.available || (!this.current && !this.beforeStart())) return null
     this.current?.storage.dispose()
     this.seedGuide = initialGuide ? clone(initialGuide) : undefined
     const id = `demo-${Date.now()}-${++this.serial}`
     const storageKey = `anew-demo-workspace:${id}`
     const storage = new MemoryDemoStorage()
-    storage.setItem(storageKey, JSON.stringify(createDemoBackup(this.seedGuide)))
+    if (scenario === "returning-user") {
+      storage.setItem(storageKey, JSON.stringify(createDemoBackup(this.seedGuide)))
+      storage.setItem("anew-planner-tour:demo:v1", "seen")
+    }
     storage.setItem("guia-locale", "en-US")
     storage.setItem("guia-bible-version", "KJV")
-    this.current = Object.freeze({ id, storageKey, storage })
+    this.current = Object.freeze({ id, storageKey, storage, scenario })
     return this.current
   }
-  reset(): DemoSession | null { return this.current ? this.start(this.seedGuide) : null }
+  reset(): DemoSession | null { return this.current ? this.start(this.seedGuide, this.current.scenario) : null }
   exit(): void { this.current?.storage.dispose(); this.current = null; this.seedGuide = undefined }
 }

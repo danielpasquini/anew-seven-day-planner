@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { BookOpen, Calendar, Check, Plus, X } from "lucide-react"
-import { useStore } from "@/lib/store"
-import { formatDateRangeLocale, getTodayFormatted } from "@/lib/date-utils"
+import { useStore, type WeekInstance } from "@/lib/store"
+import { calculateInclusiveEndDate, formatDateRangeLocale, getNextDayDate, getTodayFormatted } from "@/lib/date-utils"
+import { isValidDate } from "@/lib/backup-validation"
 import { cn } from "@/lib/utils"
 import { titleCase } from "@/lib/title-case"
 import { CreateGuideModal } from "@/components/create-guide-modal"
@@ -13,6 +14,11 @@ import { EditGuideSectionsModal } from "@/components/edit-guide-sections-modal"
 interface MyGuidesModalProps {
   isOpen: boolean
   onClose: () => void
+}
+
+function nextStartForGuide(weeks: WeekInstance[], guideId: string) {
+  const lastWeek = weeks.filter((week) => (week.guideId || week.templateId) === guideId).sort((a, b) => a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)).at(-1)
+  return lastWeek ? getNextDayDate(lastWeek.endDate) : getTodayFormatted()
 }
 
 export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
@@ -28,7 +34,6 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
     t,
     starterIsPreview,
     storageReadOnly,
-    activeWeek,
   } = useStore()
 
   const [selectedGuideId, setSelectedGuideId] = useState<string>(activeGuideId)
@@ -38,7 +43,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
   const [sectionsOpen, setSectionsOpen] = useState(false)
   const dialogRef = useModalAccessibility(isOpen, onClose)
   const en = locale === "en-US"
-  useEffect(() => { if (isOpen) { setSelectedGuideId(activeGuideId); setNewWeekTitle(""); setNewWeekStartDate(getTodayFormatted()) } }, [isOpen, activeGuideId])
+  useEffect(() => { if (isOpen) { setSelectedGuideId(activeGuideId); setNewWeekTitle(""); setNewWeekStartDate(nextStartForGuide(weeks, activeGuideId)) } }, [isOpen, activeGuideId])
 
   if (!isOpen) return null
 
@@ -46,23 +51,24 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
 
   // Weeks belonging to selected guide
   const guideWeeks = weeks.filter((w) => (w.guideId || w.templateId) === currentGuide.id)
+  const validNewWeekDate = isValidDate(newWeekStartDate) && isValidDate(calculateInclusiveEndDate(newWeekStartDate))
 
   const handleSelectGuide = (guideId: string) => {
-    if (storageReadOnly) return
     setSelectedGuideId(guideId)
+    setNewWeekTitle("")
+    setNewWeekStartDate(nextStartForGuide(weeks, guideId))
   }
 
   const handleCreateWeekForGuide = (e: React.FormEvent) => {
     e.preventDefault()
-    if (storageReadOnly || starterIsPreview) return
+    if (storageReadOnly || starterIsPreview || !validNewWeekDate) return
     const autoTitle = `${t.week.weekNumberLabel} ${guideWeeks.length + 1}`
     createWeek(
       newWeekTitle.trim() || autoTitle,
-      newWeekStartDate || getTodayFormatted(),
+      newWeekStartDate,
       currentGuide.id
     )
-    setNewWeekTitle("")
-    setNewWeekStartDate(getTodayFormatted())
+    onClose()
   }
 
   return (
@@ -95,7 +101,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
 
         {/* Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
-          <p className="text-sm leading-relaxed text-muted-foreground">{en ? "Use a ready-made week for everyday balance or a personal goal, or create your own. Every preset works without AI." : "Use uma semana pronta para o cotidiano ou um objetivo pessoal, ou crie a sua. Todos os modelos funcionam sem IA."}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{en ? "A guide is your reusable starting point: its purpose, sections, and default activities. Browse a guide below, then open it or add a week from it. Each week keeps its own activities and notes." : "Um guia é seu ponto de partida reutilizável: propósito, seções e atividades padrão. Explore um guia abaixo e depois abra-o ou adicione uma semana a partir dele. Cada semana mantém suas próprias atividades e anotações."}</p>
           {/* Guide Selector Grid */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -126,6 +132,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                     role="button"
                     tabIndex={0}
                     aria-pressed={isSelected}
+                    aria-label={`${en ? "View Guide" : "Ver Guia"}: ${guide.title}`}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelectGuide(guide.id) } }}
                     onClick={() => handleSelectGuide(guide.id)}
                     className={cn(
@@ -151,7 +158,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                         </div>
                         {isActive && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[0.65rem] font-bold text-primary shrink-0">
-                            <Check className="size-3" aria-hidden="true" /> {t.guide.activeGuideBadge}
+                            <Check className="size-3" aria-hidden="true" /> {en ? "Selected" : "Selecionado"}
                           </span>
                         )}
                       </div>
@@ -181,6 +188,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
             <div className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
                 <div>
+                  <p className="eyebrow mb-1 text-primary">{en ? "BROWSING GUIDE" : "EXPLORANDO GUIA"}</p>
                   <div className="flex items-center gap-2">
                     <h3 className="font-serif text-base font-semibold text-foreground">
                       {titleCase(currentGuide.title)}
@@ -197,12 +205,12 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                 {activeGuideId !== currentGuide.id && (
                   <button
                     type="button"
-                    onClick={() => { if (!storageReadOnly && !starterIsPreview) selectGuide(currentGuide.id) }}
+                    onClick={() => { if (!storageReadOnly && !starterIsPreview) { selectGuide(currentGuide.id); onClose() } }}
                     disabled={storageReadOnly || starterIsPreview}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation shrink-0"
                   >
                     <Check className="size-3.5" aria-hidden="true" />
-                    <span>{t.guide.switchGuide}</span>
+                    <span>{en ? "Open Guide" : "Abrir Guia"}</span>
                   </button>
                 )}
               </div>
@@ -228,13 +236,14 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                   </div>
                 </div>
               </div></details>
-              {currentGuide.id === activeGuideId && <button type="button" disabled={storageReadOnly || starterIsPreview || activeWeek?.status === "completed"} onClick={() => setSectionsOpen(true)} className="min-h-11 rounded-xl border border-border px-4 text-sm text-primary disabled:opacity-50">{en ? "Customize Sections and Fields" : "Personalizar Seções e Campos"}</button>}
+              <button type="button" disabled={storageReadOnly || starterIsPreview} onClick={() => setSectionsOpen(true)} className="min-h-11 rounded-xl border border-border px-4 text-sm text-primary disabled:opacity-50">{en ? "Edit Guide" : "Editar Guia"}</button>
+              <p className="text-xs leading-relaxed text-muted-foreground">{en ? "Guide edits apply to future weeks only. Existing weeks keep their saved guide version, sections, activities, and notes." : "As alterações do guia valem somente para semanas futuras. As semanas existentes mantêm a versão salva do guia, as seções, atividades e anotações."}</p>
 
               {/* Create Week for this Guide */}
               <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                   <Plus className="size-3.5 text-primary" aria-hidden="true" />
-                  {titleCase(t.guide.createWeekForGuide)}: &quot;{titleCase(currentGuide.title)}&quot;
+                  {en ? "Add Week From" : "Adicionar Semana a Partir de"}: &quot;{titleCase(currentGuide.title)}&quot;
                 </h4>
 
                 {starterIsPreview && <p className="text-xs text-muted-foreground">{en ? "Choose Use This Week on the dashboard, or create a new guide, before adding another week." : "Escolha Usar Esta Semana no painel ou crie um novo guia antes de adicionar outra semana."}</p>}
@@ -259,6 +268,9 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                     </label>
                       <input id="guides-newWeekStartDate"
                       type="date"
+                      required
+                      min="0100-01-01"
+                      max="9999-12-25"
                       value={newWeekStartDate}
                       onChange={(e) => setNewWeekStartDate(e.target.value)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
@@ -268,11 +280,11 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
                   <div className="flex items-end">
                     <button
                       type="submit"
-                      disabled={storageReadOnly || starterIsPreview}
+                      disabled={storageReadOnly || starterIsPreview || !validNewWeekDate}
                       className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
                     >
                       <Plus className="size-3.5" aria-hidden="true" />
-                      <span>{t.week.createTitle}</span>
+                      <span>{en ? "Add Week" : "Adicionar Semana"}</span>
                     </button>
                   </div>
                 </form>
@@ -281,7 +293,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
               {/* Linked Weeks List */}
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {titleCase(t.week.historyTitle)} ({guideWeeks.length})
+                  {en ? "Weeks From This Guide" : "Semanas Deste Guia"} ({guideWeeks.length})
                 </h4>
 
                 {guideWeeks.length === 0 ? (
@@ -357,7 +369,7 @@ export function MyGuidesModal({ isOpen, onClose }: MyGuidesModalProps) {
         isOpen={createGuideOpen}
         onClose={() => setCreateGuideOpen(false)}
       />
-      <EditGuideSectionsModal isOpen={sectionsOpen} onClose={() => setSectionsOpen(false)} />
+      <EditGuideSectionsModal isOpen={sectionsOpen} onClose={() => setSectionsOpen(false)} guideId={currentGuide.id} />
     </div>
   )
 }

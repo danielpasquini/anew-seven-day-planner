@@ -1,16 +1,36 @@
 import "server-only"
+import { setTimeout as delay } from "node:timers/promises"
 import { AIRequestError } from "./http"
 import type { JsonSchema } from "./validation"
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+export const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 export function aiConfigured() {
   return Boolean(process.env.GEMINI_API_KEY?.trim()) && process.env.AI_ENABLED === "true"
 }
 
 function providerSchema(schema: JsonSchema): JsonSchema {
-  // Google supports a subset of JSON Schema. String lengths are enforced locally.
-  const { minLength: _min, maxLength: _max, ...rest } = schema
+  if (schema.anyOf?.every((branch) => branch.type === "object" && branch.properties)) {
+    // Gemini's decoder rejects nested object unions or emits empty objects when
+    // only their type is supplied. Send a tagged superset; callers still validate
+    // the response against the original strict per-tag schema before using it.
+    const branches = schema.anyOf
+    const properties: Record<string, JsonSchema> = {}
+    for (const branch of branches) for (const [key, value] of Object.entries(branch.properties!)) {
+      const previous = properties[key]
+      properties[key] = previous ? {
+        ...previous,
+        ...(previous.enum && value.enum ? { enum: [...new Set([...previous.enum, ...value.enum])] } : {}),
+        ...(previous.minItems !== undefined && value.minItems !== undefined ? { minItems: Math.min(previous.minItems, value.minItems) } : {}),
+        ...(previous.maxItems !== undefined && value.maxItems !== undefined ? { maxItems: Math.max(previous.maxItems, value.maxItems) } : {}),
+      } : value
+    }
+    return providerSchema({ type: "object", properties, additionalProperties: false,
+      required: (branches[0].required ?? []).filter((key) => branches.every((branch) => branch.required?.includes(key))) })
+  }
+  // Nested array bounds make this guide schema exceed Gemini's decoder limits.
+  // Enforce all lengths and item counts with the original schema on our server.
+  const { minLength: _min, maxLength: _max, minItems: _minItems, maxItems: _maxItems, ...rest } = schema
   return {
     ...rest,
     ...(schema.properties ? { properties: Object.fromEntries(Object.entries(schema.properties)
@@ -41,7 +61,7 @@ export async function generateStructuredJSON(options: {
   if (options.signal.aborted) controller.abort()
   const timer = setTimeout(() => controller.abort(), timeout)
   try {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    const request = {
       method: "POST",
       cache: "no-store",
       signal: controller.signal,
@@ -50,12 +70,21 @@ export async function generateStructuredJSON(options: {
         model,
         store: false,
         stream: false,
-        system_instruction: options.system,
+        system_instruction: `${options.system}\nFor tagged objects, omit properties unrelated to the selected tag. Blocks tagged lead, p, or h need text; note needs text and may have label; list needs items; table needs head and rows; fields needs fields and may have label; ladder needs head and ladderRows. Fields tagged static need only kind and text; text or textarea need only kind and label; scale needs only kind, label, and max. Never return empty tagged objects.`,
         input: JSON.stringify(options.input),
         response_format: { type: "text", mime_type: "application/json", schema: providerSchema(options.schema) },
         generation_config: { max_output_tokens: options.maxOutputTokens },
       }),
-    })
+    } satisfies RequestInit
+    let response: Response | undefined
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", request)
+      if (attempt === 2 || ![408, 500, 502, 503, 504].includes(response.status)) break
+      // Keep retries within the original deadline and avoid repeating rate or access failures.
+      await response.body?.cancel()
+      await delay(1000 * 2 ** attempt + Math.floor(Math.random() * 250), undefined, { signal: controller.signal })
+    }
+    if (!response) throw new Error("missing provider response")
     if (!response.ok) {
       await response.body?.cancel()
       if (response.status === 429) throw new AIRequestError(429, "The AI provider's usage limit has been reached. Wait one minute before trying again.", "PROVIDER_RATE_LIMITED")

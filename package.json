@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:ai": "node --test scripts/test-ai.mjs",
+    "check:ai": "node scripts/check-gemini.mjs",
     "test:core": "node --test scripts/test-core.cjs",
     "test": "npm run test:core && npm run test:ai",
     "native": "npm --workspace native run start",

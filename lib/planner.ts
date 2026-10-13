@@ -1,8 +1,9 @@
 import type { GuideTemplate, Section } from "./guide-data"
 import type { Locale } from "./date-utils"
 import { isValidGuide } from "./backup-validation"
+import type { PlannerPresetId } from "./week-setup"
 
-export type PlannerPresetId = "gentle" | "focus" | "balance" | "blank"
+export type { PlannerPresetId } from "./week-setup"
 export type PlannerOptions = {
   name?: string
   goal?: string
@@ -17,18 +18,26 @@ export type PlannerOptions = {
 }
 
 export const PLANNER_PRESETS = [
-  { id: "gentle" as const, title: "A Gentle Start", description: "One small step each day, with room to rest." },
-  { id: "balance" as const, title: "Everyday Balance", description: "A little space for daily tasks, connection, and rest." },
-  { id: "focus" as const, title: "One Personal Goal", description: "Break a goal you choose into seven manageable steps." },
-  { id: "blank" as const, title: "Start With a Blank Week", description: "Choose your own activities and sections." },
+  { id: "rest" as const, title: "Rest Week", description: "Seven invitations to rest, with no completion target.", effort: 0 },
+  { id: "gentle" as const, title: "A Gentle Start", description: "One small step each day, with room to rest.", effort: 1 },
+  { id: "routine" as const, title: "Build a Routine", description: "Try one daily anchor and adjust it to your time.", effort: 2 },
+  { id: "balance" as const, title: "Everyday Balance", description: "A little space for daily tasks, connection, and rest.", effort: 3 },
+  { id: "focus" as const, title: "One Personal Goal", description: "Break a goal you choose into seven manageable steps.", effort: 4 },
+  { id: "momentum" as const, title: "Build Momentum", description: "Continue a chosen activity through small daily steps.", effort: 5 },
+  { id: "active" as const, title: "More Active Week", description: "Make room for practical activities and planned breaks.", effort: 6 },
+  { id: "blank" as const, title: "Start With a Blank Week", description: "Choose your own activities and sections.", effort: 0 },
 ]
 
 export function getPlannerPresets(locale: Locale = "en-US") {
   if (locale !== "pt-BR") return PLANNER_PRESETS
   const labels = [
+    ["Semana de Descanso", "Sete convites para descansar, sem meta de conclusão."],
     ["Um Começo Leve", "Um passo pequeno por dia, com espaço para descansar."],
+    ["Construir Uma Rotina", "Experimente um apoio diário e adapte ao seu tempo."],
     ["Equilíbrio Cotidiano", "Espaço para tarefas, conexão e descanso."],
     ["Um Objetivo Pessoal", "Divida um objetivo escolhido em sete passos possíveis."],
+    ["Criar Continuidade", "Continue uma atividade escolhida em pequenos passos diários."],
+    ["Semana Mais Ativa", "Reserve espaço para atividades práticas e pausas planejadas."],
     ["Começar Com Uma Semana Vazia", "Escolha suas próprias atividades e seções."],
   ]
   return PLANNER_PRESETS.map((preset, index) => ({ ...preset, title: labels[index][0], description: labels[index][1] }))
@@ -43,10 +52,11 @@ export function plannerId(prefix = "planner"): string {
 const clean = (value: string | undefined, max = 1200) => (value ?? "").trim().slice(0, max)
 
 /** Deterministic content: presets never contact an AI service or infer personal details. */
-export function buildPresetGuide(presetId: PlannerPresetId, locale: Locale = "en-US", options: PlannerOptions = {}): GuideTemplate {
-  const preset = getPlannerPresets(locale).find((item) => item.id === presetId) ?? getPlannerPresets(locale)[0]
+export function buildPresetGuide(presetId: PlannerPresetId, locale: Locale = "en-US", options: PlannerOptions = {}, identity?: { id: string; createdAt: string }): GuideTemplate {
+  const choices = getPlannerPresets(locale)
+  const preset = choices.find((item) => item.id === presetId) ?? choices.find((item) => item.id === "gentle")!
   const isEn = locale === "en-US"
-  const id = plannerId()
+  const id = identity?.id ?? plannerId()
   const goal = clean(options.goal || options.focus, 300)
   const title = clean(options.name, 100) || (presetId === "focus" && goal ? goal.slice(0, 100) : preset.title)
   const minutes = options.intensity === "moderate" ? 15 : options.intensity === "light" ? 10 : 5
@@ -89,9 +99,54 @@ export function buildPresetGuide(presetId: PlannerPresetId, locale: Locale = "en
     "Faça uma pausa e adapte o passo ao tempo disponível.", "Repita ou continue uma parte possível.",
     "Escolha descansar ou dar mais um pequeno passo opcional.", "Observe o que avançou e escolha um passo para a próxima semana.",
   ]
-  const tasks = presetId === "blank" ? [] : presetId === "focus" ? focus : presetId === "balance" ? balance : gentle
+  const rest = isEn ? [
+    "Leave one part of today open, if you want to.", "Choose a comfortable place for a pause.",
+    "Spend a moment with something restful that you choose.", "Let an optional task wait for another day.",
+    "Keep a quiet moment or choose company, as you prefer.", "Leave room for rest without adding a task.",
+    "Notice what you would like to keep next week, or leave this open.",
+  ] : [
+    "Deixe uma parte do dia livre, se quiser.", "Escolha um lugar confortável para uma pausa.",
+    "Reserve um momento para algo tranquilo de sua escolha.", "Deixe uma tarefa opcional para outro dia.",
+    "Escolha um momento quieto ou companhia, como preferir.", "Abra espaço para descansar sem acrescentar uma tarefa.",
+    "Observe o que deseja manter na próxima semana, ou deixe em aberto.",
+  ]
+  const routine = isEn ? [
+    "Choose one small activity and a time that might fit.", "Try that activity once, if you want to.",
+    "Prepare one thing that makes the activity easier to start.", "Repeat it or adjust the time to fit today.",
+    "Leave a short pause before or after your chosen activity.", "Try the routine again, make it smaller, or skip it.",
+    "Choose which part of the routine to keep next week.",
+  ] : [
+    "Escolha uma atividade pequena e um horário possível.", "Experimente essa atividade uma vez, se quiser.",
+    "Prepare algo que facilite começar a atividade.", "Repita ou adapte o horário para hoje.",
+    "Reserve uma pausa breve antes ou depois da atividade escolhida.", "Experimente novamente, reduza ou pule a rotina.",
+    "Escolha qual parte da rotina deseja manter na próxima semana.",
+  ]
+  const momentum = isEn ? [
+    "Choose a project or activity and one part to continue.", "Prepare the materials or space for that part.",
+    `Spend about ${minutes} minutes on one chosen part, if it fits.`, "Take a pause and choose the next small part.",
+    "Continue one part or adapt it to today's time.", "Choose an optional follow-up or leave room for rest.",
+    "Keep a note of where to start next week, if useful.",
+  ] : [
+    "Escolha um projeto ou atividade e uma parte para continuar.", "Prepare os materiais ou o espaço para essa parte.",
+    `Dedique cerca de ${minutes} minutos a uma parte escolhida, se couber.`, "Faça uma pausa e escolha a próxima parte pequena.",
+    "Continue uma parte ou adapte ao tempo de hoje.", "Escolha um passo opcional ou deixe espaço para descansar.",
+    "Anote por onde começar na próxima semana, se for útil.",
+  ]
+  const active = isEn ? [
+    "Choose one practical activity and include a planned pause.", "Prepare what you need for that activity.",
+    "Try one useful part at a pace you choose.", "Make room for an accessible activity or an alternative you prefer.",
+    "Choose one task outside your usual routine, if it fits.", "Continue a chosen activity or take a planned break.",
+    "Review your activities and choose what to keep, change, or leave out.",
+  ] : [
+    "Escolha uma atividade prática e inclua uma pausa planejada.", "Prepare o que precisa para essa atividade.",
+    "Experimente uma parte útil no ritmo que escolher.", "Reserve espaço para uma atividade acessível ou outra de sua preferência.",
+    "Escolha uma tarefa fora da rotina habitual, se couber.", "Continue uma atividade escolhida ou faça uma pausa planejada.",
+    "Revise as atividades e escolha o que manter, adaptar ou deixar de fora.",
+  ]
+  const taskSets = { rest, gentle, routine, balance, focus, momentum, active, blank: [] }
+  const tasks = taskSets[preset.id]
   const weeklyPlan = tasks.map((description, dayIndex) => ({
-    id: `${id}-day-${dayIndex + 1}`, dayIndex, time: "09:00", description, order: 0, countsTowardCompletion: true,
+    id: `${id}-day-${dayIndex + 1}`, dayIndex, time: "09:00", description, order: 0, countsTowardCompletion: preset.id !== "rest",
   }))
   const note = isEn ? "Every step is optional. Change the suggested time, make it smaller, or skip it." : "Todos os passos são opcionais. Mude o horário sugerido, reduza ou pule uma atividade."
   const sections: Section[] = [{
@@ -114,7 +169,7 @@ export function buildPresetGuide(presetId: PlannerPresetId, locale: Locale = "en
     title: isEn ? "Your Preferences" : "Suas Preferências",
     blocks: preferences.map(([label, text]) => ({ type: "note" as const, label, text })),
   })
-  const now = new Date().toISOString()
+  const now = identity?.createdAt ?? new Date().toISOString()
   return {
     id, title, description: preset.description, version: 1, schemaVersion: 1, createdAt: now, updatedAt: now,
     contentLocale: locale, theologyEnabled: false, bibleVersion: null,

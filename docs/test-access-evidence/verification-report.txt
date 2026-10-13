@@ -1,0 +1,15 @@
+Anew local test access — 2026-10-13 (America/Sao_Paulo)
+
+The user narrowed the task to providing the running Expo and web test versions, not finishing or certifying the app. Release work and full end-to-end verification were stopped at that request.
+
+Web: http://localhost:3000/
+Fresh/returning test chooser: http://localhost:3000/test
+Expo Go (SDK 57), on the same Wi-Fi: exp://192.168.15.166:8081
+
+Web server returns HTTP 200; /api/ai-status reports available=true and authConfigured=true. Expo /status returns packager-status:running and its LAN manifest returns HTTP 200 with the expected host and SDK version.
+The existing server-only Gemini key was retained. AI is enabled locally with gemini-3.1-flash-lite; the actual server adapter returned HTTP 200 and valid synthetic JSON. Evidence: gemini-live-check.log and gemini-live-check.json. No account or demo records were used in this connectivity check.
+Firebase anew-58b4a uses its existing Standard default database; Anew Web was registered, email/password sign-in enabled, and existing owner-only legal rules deployed and read back. Public configuration is in ignored local environment files. Google sign-in remains disabled until separately configured.
+Recorded automated checks: 83 core and 22 API tests, zero failures/skips; web build and typecheck; native typecheck, lint, and cache-cleared Android/iOS/web export. See tests.log, web-build.log, web-typecheck.log, and native-verification.txt.
+Recorded UI evidence includes fresh/returning tests, optional question skips, reset, desktop/mobile screens, visible sound controls, and dialog keyboard checks. See the web- and native- prefixed screenshots and native-ui-verification.txt.
+
+Limits: Human app signup and email verification, real account-to-AI flow, two-account live backup/deletion checks, runtime network/storage tracing, physical-device testing, and OS reduced-motion interaction are not verified. Expo Go retains its local-only protections; native AI needs a configured installed build and a deployed HTTPS API origin. These local test versions are not a release sign-off.

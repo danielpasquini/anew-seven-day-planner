@@ -92,16 +92,16 @@ interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
   initialTab?: "semanas" | "programacao" | "aparencia" | "exportacao"
+  onCreateWeek: () => void
 }
 
-export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreateWeek }: SettingsModalProps) {
   const dialogRef = useModalAccessibility(isOpen, onClose)
   const {
     weeks,
     activeWeek,
     activeGuide,
     selectWeek,
-    createWeek,
     deleteWeek,
     theme,
     setTheme,
@@ -135,8 +135,6 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   }, [isOpen, initialTab])
 
   // Section 1: Semanas Form state
-  const [newWeekTitle, setNewWeekTitle] = useState("")
-  const [newWeekStartDate, setNewWeekStartDate] = useState(getTodayFormatted())
   const [deletingWeek, setDeletingWeek] = useState<WeekInstance | null>(null)
 
   // Section 2: Programação Editor state
@@ -159,15 +157,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   } | null>(null)
 
   if (!isOpen) return null
-
-  // Create week handler
-  const handleCreateWeek = (e: React.FormEvent) => {
-    e.preventDefault()
-    const autoTitle = `${t.week.weekNumberLabel} ${weeks.length + 1}`
-    createWeek(newWeekTitle.trim() || autoTitle, newWeekStartDate || getTodayFormatted())
-    setNewWeekTitle("")
-    setNewWeekStartDate(getTodayFormatted())
-  }
+  const weekHistory = weeks
 
   // Delete week handler
   const handleConfirmDeleteWeek = () => {
@@ -377,50 +367,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                   </p>
                 </div>
 
-                {/* Form: Criar Nova Semana */}
                 <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
-                  <h4 className="text-xs font-bold tracking-wider text-primary">
-                    {titleCase(t.settings.semanasTab.newWeekBtn)}
-                  </h4>
-                  <form onSubmit={handleCreateWeek} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                    <div className="sm:col-span-5 space-y-1">
-                      <label htmlFor="settings-newWeekTitle" className="text-xs font-medium text-foreground block">
-                        {t.week.titleLabel}
-                      </label>
-                      <input id="settings-newWeekTitle"
-                        type="text"
-                        placeholder={`${locale === "en-US" ? "For example:" : "Exemplo:"} ${t.week.weekNumberLabel} ${weeks.length + 1}`}
-                        maxLength={120}
-                        value={newWeekTitle}
-                        onChange={(e) => setNewWeekTitle(e.target.value)}
-                        /* font-size 16px to prevent iOS auto-zoom */
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-4 space-y-1">
-                      <label htmlFor="settings-newWeekStartDate" className="text-xs font-medium text-foreground block">
-                        {t.week.startDateLabel}
-                      </label>
-                      <input id="settings-newWeekStartDate"
-                        type="date"
-                        value={newWeekStartDate}
-                        onChange={(e) => setNewWeekStartDate(e.target.value)}
-                        /* font-size 16px to prevent iOS auto-zoom */
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <button
-                        type="submit"
-                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
-                      >
-                        <Plus className="size-4" aria-hidden="true" />
-                        <span>{t.common.create}</span>
-                      </button>
-                    </div>
-                  </form>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{locale === "en-US" ? "Start with your previous setup and notes, then choose the pace that fits this week." : "Comece com suas escolhas e anotações anteriores e escolha o ritmo que cabe nesta semana."}</p>
+                  <button type="button" onClick={onCreateWeek} className="primary-button"><Plus className="size-4" aria-hidden="true" />{locale === "en-US" ? "Add Week" : "Adicionar Semana"}</button>
                 </div>
 
                 {/* Confirm Delete Dialog */}
@@ -459,11 +408,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* List of Existing Weeks */}
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
-                    {titleCase(t.nav.weeks)} ({weeks.length})
+                    {locale === "en-US" ? "My Weeks" : "Minhas Semanas"} ({weekHistory.length})
                   </h4>
 
                   <div className="grid grid-cols-1 gap-2.5">
-                    {weeks.map((w) => {
+                    {weekHistory.map((w) => {
                       const isActive = w.id === activeWeek?.id
                       const rangeStr = formatDateRangeLocale(w.startDate, w.endDate, locale)
 
@@ -583,7 +532,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         value={newActTime}
                         onChange={(e) => setNewActTime(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
@@ -596,7 +545,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         value={newActDesc}
                         onChange={(e) => setNewActDesc(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
@@ -604,7 +553,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="submit"
                         disabled={!newActDesc.trim()}
-                        className="w-full flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition touch-manipulation min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Plus className="size-4" aria-hidden="true" />
                         <span>{copy("Adicionar")}</span>
@@ -650,7 +599,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                   value={editActDesc}
                                   onChange={(e) => setEditActDesc(e.target.value)}
                                   className="sm:col-span-7 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
-                                  placeholder={t.schedule.descLabel}
+                                  placeholder={locale === "en-US" ? "For example: read a few pages after lunch" : "Exemplo: ler algumas páginas depois do almoço"}
                                 />
                                 <div className="sm:col-span-2 flex items-center gap-1">
                                   <button
@@ -1127,7 +1076,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={() => window.print()}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <Printer className="size-4" aria-hidden="true" />
                         <span>{t.export.printPdf}</span>
@@ -1150,7 +1099,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={exportToMarkdown}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <FileText className="size-4" aria-hidden="true" />
                         <span>{t.export.downloadMarkdown}</span>
@@ -1173,7 +1122,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={exportWeekJSON}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation shrink-0 min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation shrink-0 min-h-[2.5rem]"
                       >
                         <FileJson className="size-4" aria-hidden="true" />
                         <span>{t.export.downloadJson}</span>
@@ -1207,11 +1156,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       </div>
                     </div>
 
-                    <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                    <div className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex flex-col sm:flex-row items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={exportToJSON}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Download className="size-4" aria-hidden="true" />
                         <span>{t.settings.exportTab.downloadBackup}</span>
@@ -1228,7 +1177,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/80 transition touch-manipulation min-h-[2.5rem]"
+                        className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 sm:w-auto flex items-center justify-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/80 transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Upload className="size-4" aria-hidden="true" />
                         <span>{t.settings.exportTab.restoreBackup}</span>

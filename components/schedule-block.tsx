@@ -265,7 +265,7 @@ export function InteractiveScheduleBlock() {
                   id="schedule-day"
                   value={daySelect}
                   onChange={(e) => setDaySelect(Number(e.target.value))}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 >
                   {days.map((d) => (
                     <option key={d.dayIndex} value={d.dayIndex}>
@@ -284,7 +284,7 @@ export function InteractiveScheduleBlock() {
                   type="time"
                   value={timeInput}
                   onChange={(e) => setTimeInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
 
@@ -297,10 +297,10 @@ export function InteractiveScheduleBlock() {
                   maxLength={1200}
                   rows={3}
                   required
-                  placeholder={t.schedule.activityPlaceholder}
+                  placeholder={locale === "en-US" ? "For example: read a few pages after lunch" : "Exemplo: ler algumas páginas depois do almoço"}
                   value={descInput}
                   onChange={(e) => setDescInput(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+                  className="w-full placeholder:text-gray-500 dark:placeholder:text-gray-400 rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
                 />
               </div>
 
