@@ -3,12 +3,13 @@
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
+import { titleCase } from "@/lib/title-case"
 
 export function TextField({ id, label }: { id: string; label: string }) {
   const { getText, setText } = useStore()
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-foreground">{label}</span>
+      <span className="mb-1.5 block text-sm font-medium text-foreground">{titleCase(label)}</span>
       <input
         type="text"
         value={getText(id)}
@@ -24,7 +25,7 @@ export function TextAreaField({ id, label }: { id: string; label: string }) {
   const { getText, setText } = useStore()
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-foreground">{label}</span>
+      <span className="mb-1.5 block text-sm font-medium text-foreground">{titleCase(label)}</span>
       <textarea
         value={getText(id)}
         onChange={(e) => setText(id, e.target.value)}
@@ -41,10 +42,11 @@ export function ScaleField({ id, label, max = 10 }: { id: string; label: string;
   const current = getText(id)
   const values = Array.from({ length: max + 1 }, (_, i) => i)
   return (
-    <div>
-      <span className="mb-1.5 block text-sm font-medium text-foreground">
-        {label} <span className="text-muted-foreground">(0–{max})</span>
-      </span>
+    <fieldset>
+      <legend className="mb-2 block text-sm font-medium text-foreground">
+        {titleCase(label)} <span className="text-muted-foreground">(0–{max})</span>
+        {current && <span className="ml-2 hidden print:inline">: {current}</span>}
+      </legend>
       <div className="flex flex-wrap gap-1.5">
         {values.map((v) => {
           const active = current === String(v)
@@ -56,7 +58,7 @@ export function ScaleField({ id, label, max = 10 }: { id: string; label: string;
               onClick={() => setText(id, active ? "" : String(v))}
               className={cn(
                 /* min 44×44 touch target on mobile via min-h */
-                "flex h-9 w-9 min-h-[2.25rem] min-w-[2.25rem] items-center justify-center rounded-lg border text-sm font-medium tabular-nums transition touch-manipulation",
+                "flex size-11 items-center justify-center rounded-xl border text-sm font-medium tabular-nums transition touch-manipulation",
                 active
                   ? "border-primary bg-primary text-primary-foreground shadow-xs font-bold"
                   : "border-input bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -67,7 +69,7 @@ export function ScaleField({ id, label, max = 10 }: { id: string; label: string;
           )
         })}
       </div>
-    </div>
+    </fieldset>
   )
 }
 
@@ -80,7 +82,7 @@ export function CheckField({
   label: string
   scaleId: string
 }) {
-  const { isDone, toggleDone, getText, setText } = useStore()
+  const { isDone, toggleDone, getText, setText, locale } = useStore()
   const done = isDone(id)
   return (
     <div className="flex items-center gap-3 py-1">
@@ -91,19 +93,22 @@ export function CheckField({
         aria-label={label}
         onClick={() => toggleDone(id)}
         className={cn(
-          "flex size-6 shrink-0 items-center justify-center rounded-md border-2 transition touch-manipulation",
+          "flex size-11 shrink-0 items-center justify-center rounded-xl border-2 transition touch-manipulation",
           done ? "border-primary bg-primary text-primary-foreground shadow-xs" : "border-input bg-card hover:border-primary/60",
         )}
       >
         {done && <Check className="size-4" strokeWidth={3} aria-hidden="true" />}
       </button>
       <span className={cn("flex-1 text-sm font-medium leading-relaxed", done ? "text-muted-foreground line-through" : "text-foreground")}>
-        {label}
+        {titleCase(label)}
       </span>
       <input
-        type="text"
+        type="number"
+        min={0}
+        max={10}
+        step={1}
         inputMode="numeric"
-        aria-label={`Nota prevista para: ${label}`}
+        aria-label={`${locale === "en-US" ? "Your own rating for" : "Sua percepção de"}: ${label}`}
         placeholder="0–10"
         value={getText(scaleId)}
         onChange={(e) => setText(scaleId, e.target.value)}

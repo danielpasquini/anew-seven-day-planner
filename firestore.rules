@@ -3,59 +3,36 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =========================================================================
-    // HELPER FUNCTIONS
-    // =========================================================================
-
-    // Verify if the request is made by an authenticated user
-    function isAuthenticated() {
-      return request.auth != null && request.auth.uid != null;
-    }
-
-    // Verify if the authenticated user is the resource owner
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId;
     }
-
-    // =========================================================================
-    // USER DATA ISOLATION (users/{userId} and all subcollections)
-    // =========================================================================
-
-    // User profile and top-level document
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-
-      // User Settings / Preferences (theme, palette, default locale, bible version)
-      match /settings/{settingId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      // User GuideTemplates
-      match /guides/{guideId} {
-        allow read, write: if isOwner(userId);
-
-        // Nested WeekInstances under GuideTemplate
-        match /weeks/{weekId} {
-          allow read, write: if isOwner(userId);
-        }
-      }
-
-      // Flat WeekInstances (if queryable directly per user)
-      match /weeks/{weekId} {
-        allow read, write: if isOwner(userId);
-      }
-
-      // Catch-all safety boundary: any future subcollection under users/{userId}
-      // is strictly restricted to the resource owner only.
-      match /{allSubcollections=**} {
-        allow read, write: if isOwner(userId);
-      }
+    function isCurrentLegalAcceptance() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'usageTermsVersion', 'privacyVersion', 'healthVersion',
+          'adultConfirmed', 'acceptedAt'
+        ])
+        && data.keys().hasOnly([
+          'usageTermsVersion', 'privacyVersion', 'healthVersion',
+          'adultConfirmed', 'acceptedAt'
+        ])
+        && data.usageTermsVersion == '2026-10-12-mobile-1'
+        && data.privacyVersion == '2026-10-12-mobile-1'
+        && data.healthVersion == '2026-10-12-mobile-1'
+        && data.adultConfirmed == true
+        && data.acceptedAt is timestamp
+        && data.acceptedAt == request.time;
     }
-
-    // =========================================================================
-    // GLOBAL DEFAULT DENY
-    // Any document or collection not explicitly matched above is blocked.
-    // =========================================================================
+    // Registration records confirmations before email verification.
+    // Protected server features also require verified email and this record.
+    match /users/{userId}/settings/legal {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isCurrentLegalAcceptance();
+      // Removing confirmations must immediately disable protected features.
+      allow delete: if isOwner(userId);
+    }
+    // Journals, guides and preferences remain local in this version.
+    // Do not add recursive owner-write rules without a defined cloud schema.
     match /{document=**} {
       allow read, write: if false;
     }

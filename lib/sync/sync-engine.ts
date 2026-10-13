@@ -53,6 +53,11 @@ export class SyncEngine {
   private currentUserId: string | null = null
   private isOnline = true
   private lastSavedTimestamp: string = new Date().toISOString()
+  private pendingLocalPersist: (() => void) | null = null
+  private localPersistFailed = false
+  private networkListenersAttached = false
+  private readonly onOnline = () => this.handleNetworkChange(true)
+  private readonly onOffline = () => this.handleNetworkChange(false)
 
   constructor(cloudProvider?: RemoteCloudProvider) {
     if (cloudProvider) {
@@ -61,8 +66,6 @@ export class SyncEngine {
 
     if (typeof window !== "undefined") {
       this.isOnline = navigator.onLine
-      window.addEventListener("online", () => this.handleNetworkChange(true))
-      window.addEventListener("offline", () => this.handleNetworkChange(false))
     }
   }
 
@@ -75,6 +78,11 @@ export class SyncEngine {
   }
 
   public subscribe(listener: SyncListener): () => void {
+    if (typeof window !== "undefined" && !this.networkListenersAttached) {
+      window.addEventListener("online", this.onOnline)
+      window.addEventListener("offline", this.onOffline)
+      this.networkListenersAttached = true
+    }
     this.listeners.add(listener)
     listener(this.status)
     return () => {
@@ -127,13 +135,8 @@ export class SyncEngine {
 
     // 1. Fast Local Storage Write (150ms)
     if (this.localDebounceTimer) clearTimeout(this.localDebounceTimer)
-    this.localDebounceTimer = setTimeout(() => {
-      try {
-        onLocalPersist?.(fullPayload)
-      } catch (err) {
-        console.warn("Local storage write warning:", err)
-      }
-    }, 150)
+    this.pendingLocalPersist = onLocalPersist ? () => onLocalPersist(fullPayload) : null
+    this.localDebounceTimer = setTimeout(() => this.flushLocalPersist(), 150)
 
     // 2. Debounced Remote Cloud Sync (600ms)
     if (!this.isOnline) {
@@ -153,7 +156,9 @@ export class SyncEngine {
    * Flushes the pending sync immediately to Cloud Provider.
    */
   public async flushPendingSync(): Promise<boolean> {
+    if (!this.flushLocalPersist()) return false
     if (!this.pendingPayload || !this.cloudProvider || !this.currentUserId) {
+      this.pendingPayload = null
       this.notify("saved")
       return true
     }
@@ -175,6 +180,38 @@ export class SyncEngine {
       this.notify("error", error instanceof Error ? error.message : "Sync failure")
       return false
     }
+  }
+
+  /** Flush synchronously on pagehide; never label a failed browser write as saved. */
+  public flushLocalPersist(): boolean {
+    if (this.localDebounceTimer) clearTimeout(this.localDebounceTimer)
+    this.localDebounceTimer = null
+    if (!this.pendingLocalPersist) return !this.localPersistFailed
+    try {
+      this.pendingLocalPersist()
+      this.pendingLocalPersist = null
+      this.localPersistFailed = false
+      return true
+    } catch {
+      this.localPersistFailed = true
+      this.notify("error", "Browser storage is unavailable or full")
+      return false
+    }
+  }
+
+  /** Cancel queued writes before explicit deletion and release browser listeners. */
+  public dispose(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer)
+    if (this.localDebounceTimer) clearTimeout(this.localDebounceTimer)
+    this.debounceTimer = null
+    this.localDebounceTimer = null
+    this.pendingPayload = null
+    this.pendingLocalPersist = null
+    if (typeof window !== "undefined") {
+      window.removeEventListener("online", this.onOnline)
+      window.removeEventListener("offline", this.onOffline)
+    }
+    this.networkListenersAttached = false
   }
 
   /**

@@ -382,49 +382,32 @@ const BOOK_ENGLISH_NAMES: Record<string, string> = {
  */
 export class BibleProvider {
   /**
-   * Finds a passage entry in verified corpus using flexible reference normalization
+   * Resolves only an exact known book, chapter and verse range. Unknown references stay unavailable.
    */
   static findPassage(reference: string): ScripturePassage | null {
-    if (!reference || typeof reference !== "string") return null
-    const cleanRef = reference.trim().toLowerCase().replace(/[–—]/g, "-")
-
-    // Exact or direct match
-    const directMatch = Object.values(VERIFIED_SCRIPTURES).find(
-      (p) => p.ref.toLowerCase().replace(/[–—]/g, "-") === cleanRef
-    )
-    if (directMatch) return directMatch
-
-    // Extract numbers (e.g., "139:23-24" or "23:1-3")
-    const numMatch = cleanRef.match(/(\d+)[:\s]+(\d+)(?:-(\d+))?/)
-    if (!numMatch) {
-      return Object.values(VERIFIED_SCRIPTURES).find((p) =>
-        p.ref.toLowerCase().includes(cleanRef) || cleanRef.includes(p.ref.toLowerCase())
-      ) || null
-    }
-
-    const [, chapter, startVerse, endVerse] = numMatch
-    const verseRangeStr = endVerse ? `${chapter}:${startVerse}-${endVerse}` : `${chapter}:${startVerse}`
-
-    for (const [canonicalBook, synonyms] of Object.entries(BOOK_SYNONYMS)) {
-      const matchesBook = synonyms.some((syn) => cleanRef.includes(syn))
-      if (matchesBook) {
-        const found = Object.values(VERIFIED_SCRIPTURES).find((p) => {
-          const pLower = p.ref.toLowerCase().replace(/[–—]/g, "-")
-          return pLower.includes(canonicalBook.toLowerCase()) && pLower.includes(verseRangeStr)
-        })
-        if (found) return found
-      }
-    }
-
-    return Object.values(VERIFIED_SCRIPTURES).find((p) =>
-      p.ref.replace(/[–—]/g, "-").includes(verseRangeStr)
-    ) || null
+    if (!reference || typeof reference !== "string" || reference.length > 150) return null
+    const cleanRef = reference.trim().replace(/[–—]/g, "-")
+    const parts = cleanRef.match(/^(.+?)\s*(\d+):(\d+)(?:-(\d+))?$/)
+    if (!parts) return null
+    const [, book, chapter, startVerse, endVerse] = parts
+    if (Number(chapter) < 1 || Number(startVerse) < 1 || (endVerse && Number(endVerse) < Number(startVerse))) return null
+    const normalizeBook = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[.\s]/g, "")
+    const bookKey = normalizeBook(book)
+    const canonicalBook = Object.entries(BOOK_SYNONYMS).find(([name, synonyms]) => normalizeBook(name) === bookKey || synonyms.some((synonym) => normalizeBook(synonym) === bookKey))?.[0]
+    if (!canonicalBook) return null
+    const range = `${Number(chapter)}:${Number(startVerse)}${endVerse ? `-${Number(endVerse)}` : ""}`
+    return Object.values(VERIFIED_SCRIPTURES).find((passage) => {
+      const match = passage.ref.match(/^(.+?)\s*(\d+):(\d+)(?:-(\d+))?$/)
+      if (!match || normalizeBook(match[1]) !== normalizeBook(canonicalBook)) return false
+      const knownRange = `${Number(match[2])}:${Number(match[3])}${match[4] ? `-${Number(match[4])}` : ""}`
+      return knownRange === range
+    }) || null
   }
 
   /**
    * Resolves a complete Verse object ({ ref, ara, nvt, kjv, niv })
    */
-  static resolveVerse(reference: string, contentLocale: BibleLocale = "pt-BR"): { ref: string; ara: string; nvt: string; kjv?: string; niv?: string } | null {
+  static resolveVerse(reference: string, contentLocale: BibleLocale = "en-US"): { ref: string; ara: string; nvt: string; kjv?: string; niv?: string } | null {
     const entry = BibleProvider.findPassage(reference)
     if (!entry) return null
 
@@ -450,8 +433,9 @@ export class BibleProvider {
   /**
    * Resolves a passage by reference, preferred version and locale
    */
-  static resolvePassage(reference: string, version?: BibleVersion, locale: BibleLocale = "pt-BR"): VerseText {
-    const selectedVersion: BibleVersion = version || (locale === "en-US" ? "KJV" : "ARA")
+  static resolvePassage(reference: string, version?: BibleVersion, locale: BibleLocale = "en-US"): VerseText {
+    const available = BibleProvider.getAvailableVersions(locale)
+    const selectedVersion: BibleVersion = version && available.includes(version) ? version : BibleProvider.getDefaultVersion(locale)
     const entry = BibleProvider.findPassage(reference)
 
     if (entry) {
@@ -489,7 +473,7 @@ export class BibleProvider {
   /**
    * Returns standard attribution notice for exports and footer display
    */
-  static getAttributionNotice(version: BibleVersion, locale: BibleLocale = "pt-BR"): string {
+  static getAttributionNotice(version: BibleVersion, locale: BibleLocale = "en-US"): string {
     switch (version) {
       case "NIV":
         return "Scripture quotations taken from The Holy Bible, New International Version®, NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide."
@@ -518,4 +502,3 @@ export class BibleProvider {
     return locale === "en-US" ? "KJV" : "ARA"
   }
 }
-

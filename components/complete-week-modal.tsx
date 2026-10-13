@@ -1,8 +1,10 @@
 "use client"
 
+import { titleCase } from "@/lib/title-case"
+
 import { CheckCircle2, X, Sparkles } from "lucide-react"
 import { useStore } from "@/lib/store"
-import { cn } from "@/lib/utils"
+import { useModalAccessibility } from "@/components/modal-accessibility"
 
 type CompleteWeekModalProps = {
   isOpen: boolean
@@ -11,6 +13,7 @@ type CompleteWeekModalProps = {
 
 export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
   const { activeWeek, completeWeek, isGeneratingAI, locale, t } = useStore()
+  const dialogRef = useModalAccessibility(isOpen, onClose)
 
   if (!isOpen || !activeWeek) return null
 
@@ -18,7 +21,6 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
   const countableActivities = activities.filter((a) => a.countsTowardCompletion !== false)
   const totalTasks = countableActivities.length
   const completedTasks = countableActivities.filter((a) => Boolean(activeWeek.data.done[a.id])).length
-  const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   const handleConfirm = async () => {
     await completeWeek(activeWeek.id)
@@ -27,6 +29,8 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
@@ -51,7 +55,7 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
               <CheckCircle2 className="size-5" aria-hidden="true" />
             </div>
             <h3 id="complete-week-title" className="font-serif text-lg font-semibold text-foreground">
-              {t.review.formalCompletionTitle}
+              {titleCase(t.review.formalCompletionTitle)}
             </h3>
           </div>
           <button
@@ -74,20 +78,14 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
           <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold">
               <span className="text-foreground">{t.review.snapshotTitle}:</span>
-              <span className="text-primary font-mono">{percentage}% {t.common.completed}</span>
+              <span className="text-primary">{completedTasks} / {totalTasks}</span>
             </div>
 
-            <div className="w-full bg-secondary rounded-full h-2 overflow-hidden border border-border/50">
-              <div
-                className="bg-primary h-full transition-all duration-300"
-                style={{ width: `${percentage}%` }}
-              />
-            </div>
 
             <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground pt-1">
               <span>{t.review.activeCountableTasks}</span>
               <span className="font-medium text-foreground">
-                {completedTasks} {t.common.of} {totalTasks} ({percentage}%)
+                {completedTasks} {t.common.of} {totalTasks}
               </span>
             </div>
           </div>

@@ -1,1045 +1,161 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import {
-  BookOpen,
-  Sparkles,
-  X,
-  Shield,
-  ArrowRight,
-  ArrowLeft,
-  Check,
-  RotateCcw,
-  AlertCircle,
-  FileText,
-  Clock,
-  Heart,
-  Brain,
-  Compass,
-  Loader2,
-  Calendar,
-  Layers,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useRef, useState } from "react"
+import { AlertCircle, ArrowLeft, ArrowRight, BookOpen, Check, Loader2, RotateCcw, Sparkles, X } from "lucide-react"
 import { useStore } from "@/lib/store"
-import type { GuideTemplate, Section } from "@/lib/guide-data"
+import type { GuideTemplate } from "@/lib/guide-data"
+import { buildPresetGuide, getPlannerPresets, type PlannerPresetId } from "@/lib/planner"
+import { cn } from "@/lib/utils"
+import { useModalAccessibility } from "@/components/modal-accessibility"
+import { GuideSectionEditor, validateGuideSections } from "@/components/guide-section-editor"
+import { useAuth } from "@/lib/auth/client"
+import { useDemo } from "@/lib/demo"
+import { getAuthToken } from "@/lib/auth/firebase-client"
+import { apiUrl } from "@/lib/api-url"
+import { titleCase } from "@/lib/title-case"
+import { isValidGuide } from "@/lib/backup-validation"
 
 export type GuideIntensity = "muito leve" | "leve" | "moderada"
+export interface GuideDraftData { name: string; focus: string; currentDifficulties: string; psychologyLines: string; theologyCosmovision: string; routineSchedule: string; whatHelps: string; thingsToAvoid: string; intensity: GuideIntensity; additionalNotes: string }
+const INITIAL_DRAFT: GuideDraftData = { name: "", focus: "", currentDifficulties: "", psychologyLines: "", theologyCosmovision: "", routineSchedule: "", whatHelps: "", thingsToAvoid: "", intensity: "muito leve", additionalNotes: "" }
+type Suggestions = Partial<Record<"name" | "focus" | "routineSchedule" | "whatHelps" | "thingsToAvoid" | "additionalNotes", string>>
 
-export interface GuideDraftData {
-  name: string
-  focus: string
-  schemas: string
-  traumaExperiences: string
-  currentDifficulties: string
-  priorityAreas: string
-  psychologyLines: string
-  theologyCosmovision: string
-  routineSchedule: string
-  whatHelps: string
-  thingsToAvoid: string
-  intensity: GuideIntensity
-  additionalNotes: string
+function DraftField({ field, label, hint, value, onChange, multiline = false }: { field: keyof GuideDraftData; label: string; hint?: string; value: string; onChange: (value: string) => void; multiline?: boolean }) {
+  const props = { id: `guide-draft-${field}`, value, onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.target.value), maxLength: field === "name" ? 100 : 1200, "aria-describedby": hint ? `guide-draft-${field}-hint` : undefined, className: "w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-base leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-ring/20" }
+  return <div><label htmlFor={props.id} className="mb-2 block text-sm font-medium">{titleCase(label)}</label>{multiline ? <textarea {...props} rows={3} /> : <input {...props} type="text" />}{hint && <p id={`guide-draft-${field}-hint`} className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>}</div>
 }
 
-const STORAGE_KEY_GUIDE_DRAFT = "guia-novo-draft"
-
-const INITIAL_DRAFT: GuideDraftData = {
-  name: "",
-  focus: "",
-  schemas: "",
-  traumaExperiences: "",
-  currentDifficulties: "",
-  priorityAreas: "",
-  psychologyLines: "",
-  theologyCosmovision: "",
-  routineSchedule: "",
-  whatHelps: "",
-  thingsToAvoid: "",
-  intensity: "leve",
-  additionalNotes: "",
-}
-
-interface CreateGuideModalProps {
-  isOpen: boolean
-  onClose: () => void
-}
-
-export function CreateGuideModal({ isOpen, onClose }: CreateGuideModalProps) {
-  const { t, locale, bibleVersion, saveAndActivateGuide } = useStore()
-  const [step, setStep] = useState<"form" | "review" | "preview">("form")
-  const [formData, setFormData] = useState<GuideDraftData>(INITIAL_DRAFT)
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null)
-
-  // AI Generation State
+export function CreateGuideModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const demo = useDemo()
+  const { locale, bibleVersion, saveAndActivateGuide, storageReadOnly, t } = useStore()
+  const { user } = useAuth()
+  const draftKey = `guia-novo-draft:${demo.enabled ? "demo" : user?.uid || "preview"}`
+  const draftStorage = () => demo.enabled ? demo.demoStorage : localStorage
+  const en = locale === "en-US"
+  const copy = (pt: string, english: string) => en ? english : pt
+  const [step, setStep] = useState<"form" | "share" | "preview">("form")
+  const [draft, setDraft] = useState<GuideDraftData>(INITIAL_DRAFT)
+  const [preset, setPreset] = useState<PlannerPresetId>("gentle")
+  const [spiritualityEnabled, setSpiritualityEnabled] = useState(false)
+  const [aiConsent, setAIConsent] = useState(false)
+  const [aiPurpose, setAIPurpose] = useState<"assist" | "plan">("plan")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationError, setGenerationError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [draftError, setDraftError] = useState(false)
+  const [available, setAvailable] = useState<boolean | null>(null)
   const [generatedGuide, setGeneratedGuide] = useState<GuideTemplate | null>(null)
-  const [profileSummary, setProfileSummary] = useState<string>("")
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
+  const [guideSource, setGuideSource] = useState<"preset" | "ai">("preset")
+  const [suggestions, setSuggestions] = useState<Suggestions | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const close = () => { abortRef.current?.abort(); onClose() }
+  const dialogRef = useModalAccessibility(isOpen, close)
+  useEffect(() => () => abortRef.current?.abort(), [draftKey, isOpen])
+  useEffect(() => { if (error) errorRef.current?.focus() }, [error])
 
-  // Load draft from localStorage on mount/open
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) { abortRef.current?.abort(); return }
+    setStep("form"); setAIConsent(false); setError(null); setDraftError(false); setIsGenerating(false); setGeneratedGuide(null); setSuggestions(null); setSpiritualityEnabled(false); setPreset("gentle")
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_GUIDE_DRAFT)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (parsed && typeof parsed === "object") {
-          setFormData({ ...INITIAL_DRAFT, ...parsed })
-        }
+      const parsed: unknown = JSON.parse(draftStorage()?.getItem(draftKey) || "null")
+      const restored = { ...INITIAL_DRAFT }
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>
+        for (const key of Object.keys(INITIAL_DRAFT) as (keyof GuideDraftData)[]) if (key !== "intensity" && typeof record[key] === "string") restored[key] = (record[key] as string).slice(0, key === "name" ? 100 : 1200)
+        if (record.intensity === "muito leve" || record.intensity === "leve" || record.intensity === "moderada") restored.intensity = record.intensity
       }
-    } catch {
-      // ignore
-    }
-  }, [isOpen])
+      setDraft(restored)
+    } catch { setDraft({ ...INITIAL_DRAFT }); setDraftError(true) }
+    if (demo.enabled) { setAvailable(false); return }
+    const controller = new AbortController(); setAvailable(null)
+    const statusUrl = apiUrl("/api/ai-status")
+    if (!statusUrl) setAvailable(false)
+    else fetch(statusUrl, { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((result) => { if (!controller.signal.aborted) setAvailable(result?.available === true) }).catch(() => { if (!controller.signal.aborted) setAvailable(false) })
+    return () => controller.abort()
+  }, [isOpen, draftKey, demo.enabled, demo.demoStorage])
 
-  // Auto-save draft on changes
-  const updateField = (field: keyof GuideDraftData, value: string) => {
-    setFormData((prev) => {
-      const next = { ...prev, [field]: value }
-      try {
-        localStorage.setItem(STORAGE_KEY_GUIDE_DRAFT, JSON.stringify(next))
-      } catch {
-        // ignore
-      }
-      return next
-    })
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev }
-        delete next[field]
-        return next
-      })
-    }
+  const persistDraft = (next: GuideDraftData) => { try { draftStorage()?.setItem(draftKey, JSON.stringify(next)); setDraftError(false) } catch { setDraftError(true) } }
+  const updateField = (field: keyof GuideDraftData, value: string) => { const next = { ...draft, [field]: value }; setDraft(next); persistDraft(next); setError(null); setAIConsent(false) }
+  const previewLocal = () => {
+    setGeneratedGuide(buildPresetGuide(preset, locale, { name: draft.name.trim(), goal: draft.focus.trim(), routine: draft.routineSchedule, thingsToAvoid: draft.thingsToAvoid, whatHelps: draft.whatHelps, additionalNotes: draft.additionalNotes }))
+    setGuideSource("preset"); setError(null); setStep("preview")
   }
-
-  // Clear draft
-  const handleResetDraft = () => {
-    if (window.confirm(t.createGuide.resetDraftConfirm)) {
-      setFormData(INITIAL_DRAFT)
-      try {
-        localStorage.removeItem(STORAGE_KEY_GUIDE_DRAFT)
-      } catch {
-        // ignore
-      }
-      setErrors({})
-      setStep("form")
-      setGeneratedGuide(null)
-    }
-  }
-
-  // Deterministic calculation of theology status
-  const theologyEnabled = Boolean(
-    formData.theologyCosmovision && formData.theologyCosmovision.trim().length > 0
-  )
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {}
-    if (!formData.name.trim()) {
-      newErrors.name = t.createGuide.errorName
-    }
-    if (!formData.focus.trim()) {
-      newErrors.focus = t.createGuide.errorFocus
-    }
-    if (!formData.currentDifficulties.trim()) {
-      newErrors.currentDifficulties = t.createGuide.errorDifficulties
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleProceedToReview = () => {
-    if (validateForm()) {
-      setStep("review")
-      setSaveSuccessMsg(null)
-    }
-  }
-
-  // Call Gemini API to generate the Guide Template
-  const handleGenerate = async () => {
-    setIsGenerating(true)
-    setGenerationError(null)
+  const share = (purpose: "assist" | "plan") => { setAIPurpose(purpose); setAIConsent(false); setError(null); setStep("share") }
+  const generate = async () => {
+    if (!aiConsent || isGenerating || demo.enabled) return
+    setIsGenerating(true); setError(null)
+    const controller = new AbortController(); abortRef.current = controller
     try {
-      const intensityCode =
-        formData.intensity === "muito leve"
-          ? "very_light"
-          : formData.intensity === "moderada"
-          ? "moderate"
-          : "light"
-
-      const payload = {
-        name: formData.name,
-        focus: formData.focus,
-        schemas: formData.schemas,
-        traumaSummary: formData.traumaExperiences,
-        currentDifficulties: formData.currentDifficulties,
-        priorityAreas: formData.priorityAreas,
-        psychologyApproaches: formData.psychologyLines,
-        theologyCosmovision: formData.theologyCosmovision,
-        routine: formData.routineSchedule,
-        whatHelps: formData.whatHelps,
-        thingsToAvoid: formData.thingsToAvoid,
-        intensity: intensityCode,
-        additionalNotes: formData.additionalNotes,
-        contentLocale: locale,
-        bibleVersion: theologyEnabled ? bibleVersion : null,
+      const url = apiUrl("/api/generate-guide")
+      if (!url) throw new Error(copy("A IA está indisponível. Você pode usar os modelos prontos.", "AI is unavailable. You can use a ready-made week."))
+      const token = await getAuthToken()
+      if (!token) throw new Error(copy("Entre em uma conta verificada para usar a IA.", "Sign in with a verified account to use AI."))
+      if (controller.signal.aborted) return
+      const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, signal: controller.signal, body: JSON.stringify({ mode: aiPurpose === "assist" ? "assist" : "generate", name: draft.name.trim() || copy("Minha Semana", "My Week"), focus: draft.focus, currentDifficulties: draft.currentDifficulties, psychologyApproaches: draft.psychologyLines, routine: draft.routineSchedule, whatHelps: draft.whatHelps, thingsToAvoid: draft.thingsToAvoid, additionalNotes: draft.additionalNotes, intensity: draft.intensity === "muito leve" ? "very_light" : draft.intensity === "moderada" ? "moderate" : "light", contentLocale: locale, theologyEnabled: spiritualityEnabled, theologyCosmovision: spiritualityEnabled ? draft.theologyCosmovision : "", bibleVersion: spiritualityEnabled ? bibleVersion : null, aiConsent: true }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || copy("Não foi possível preparar a proposta. Tente novamente.", "The proposal could not be prepared. Try again."))
+      if (controller.signal.aborted) return
+      if (aiPurpose === "assist") {
+        const keys = ["name", "focus", "routineSchedule", "whatHelps", "thingsToAvoid", "additionalNotes"] as const
+        const raw = result.draftSuggestions
+        if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).some((key) => !keys.includes(key as typeof keys[number])) || !keys.every((key) => typeof raw[key] === "string" && raw[key].length <= (key === "name" ? 100 : 1200)) || !Object.values(raw).some((value) => typeof value === "string" && value.trim())) throw new Error(copy("Não foram recebidas sugestões válidas.", "No valid suggestions were received."))
+        const next: Suggestions = {}
+        for (const key of ["name", "focus", "routineSchedule", "whatHelps", "thingsToAvoid", "additionalNotes"] as const) if (typeof result.draftSuggestions[key] === "string") next[key] = result.draftSuggestions[key].slice(0, key === "name" ? 100 : 1200)
+        setSuggestions(next); setStep("form")
+      } else {
+        if (!isValidGuide(result.guideTemplate)) throw new Error(copy("Não foi recebido um guia válido.", "No valid guide was received."))
+        setGeneratedGuide(result.guideTemplate); setGuideSource("ai"); setStep("preview")
       }
-
-      const res = await fetch("/api/generate-guide", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok || !data.guideTemplate) {
-        throw new Error(data.error || "Não foi possível gerar o guia.")
-      }
-
-      setGeneratedGuide(data.guideTemplate)
-      setProfileSummary(data.profileSummary || "")
-      setStep("preview")
-      if (data.guideTemplate.sections?.length > 0) {
-        setExpandedSectionId(data.guideTemplate.sections[0].id)
-      }
-    } catch (err: any) {
-      console.error("Erro ao gerar guia:", err)
-      setGenerationError(err.message || "Erro de conexão ao gerar guia com IA.")
-    } finally {
-      setIsGenerating(false)
-    }
+    } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : copy("Não foi possível conectar. Tente novamente.", "Could not connect. Try again.")) }
+    finally { if (!controller.signal.aborted) setIsGenerating(false); setAIConsent(false) }
   }
-
-  // Save generated guide and make active
-  const handleSaveAndActivate = () => {
-    if (!generatedGuide) return
+  const applySuggestions = () => {
+    if (!suggestions) return
+    const next = { ...draft, name: draft.name || suggestions.name || "", focus: draft.focus || suggestions.focus || "", routineSchedule: draft.routineSchedule || suggestions.routineSchedule || "", whatHelps: draft.whatHelps || suggestions.whatHelps || "", thingsToAvoid: draft.thingsToAvoid || suggestions.thingsToAvoid || "", additionalNotes: draft.additionalNotes || suggestions.additionalNotes || "" }
+    setDraft(next); persistDraft(next); setSuggestions(null)
+  }
+  const save = () => {
+    if (!generatedGuide || storageReadOnly) return
+    const issue = validateGuideSections(generatedGuide.sections, en)
+    if (issue) { setError(issue); return }
+    if (!isValidGuide(generatedGuide)) { setError(copy("Não foi possível validar este guia. Revise os campos antes de salvar.", "This guide could not be validated. Review the fields before saving.")); return }
     saveAndActivateGuide(generatedGuide)
-    try {
-      localStorage.removeItem(STORAGE_KEY_GUIDE_DRAFT)
-    } catch {}
+    try { draftStorage()?.removeItem(draftKey) } catch {}
     onClose()
   }
-
+  const reset = () => { if (!window.confirm(t.createGuide.resetDraftConfirm)) return; setDraft({ ...INITIAL_DRAFT }); setPreset("gentle"); setSpiritualityEnabled(false); setAIConsent(false); setError(null); setSuggestions(null); try { draftStorage()?.removeItem(draftKey); setDraftError(false) } catch { setDraftError(true) } }
   if (!isOpen) return null
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-guide-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6"
-    >
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="fixed inset-0 bg-background/80 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
-        aria-hidden="true"
-      />
-
-      {/* Modal Card */}
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-5 py-3.5 sm:px-6 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              {step === "preview" ? (
-                <Sparkles className="size-4" aria-hidden="true" />
-              ) : (
-                <BookOpen className="size-4" aria-hidden="true" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <h2 id="create-guide-modal-title" className="font-serif text-base font-bold text-foreground truncate">
-                {step === "preview"
-                  ? t.createGuide.previewTitle
-                  : step === "review"
-                  ? t.createGuide.reviewSectionTitle
-                  : t.createGuide.title}
-              </h2>
-              <p className="text-xs text-muted-foreground truncate">
-                {step === "preview"
-                  ? t.createGuide.previewSubtitle
-                  : step === "review"
-                  ? t.createGuide.reviewSummaryDesc
-                  : t.createGuide.step1Subtitle}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {step === "form" && (
-              <button
-                type="button"
-                onClick={handleResetDraft}
-                title={t.createGuide.resetDraft}
-                className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition touch-manipulation"
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition touch-manipulation"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 overscroll-contain">
-          {/* STEP 1: FORMULÁRIO */}
-          {step === "form" && (
-            <div className="space-y-6">
-              {/* Informative banner */}
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:p-4 text-xs text-foreground/90 space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-primary">
-                  <Shield className="size-4 shrink-0" aria-hidden="true" />
-                  <span>{t.createGuide.title}</span>
-                </div>
-                <p className="text-muted-foreground leading-relaxed">
-                  {t.createGuide.step1Subtitle}
-                </p>
-              </div>
-
-              {/* Form Sections */}
-              <div className="space-y-5">
-                {/* 1. Identificação & Foco */}
-                <div className="rounded-xl border border-border p-4 bg-card/60 space-y-3.5">
-                  <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-                    <Compass className="size-4 text-primary" aria-hidden="true" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {t.createGuide.section1Title}
-                    </h3>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldName} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={t.createGuide.fieldNamePlaceholder}
-                      value={formData.name}
-                      onChange={(e) => updateField("name", e.target.value)}
-                      className={cn(
-                        "w-full rounded-lg border bg-card px-3.5 py-2.5 text-base font-medium text-foreground transition focus:outline-none focus:ring-2",
-                        errors.name
-                          ? "border-red-500 focus:ring-red-500/30"
-                          : "border-input focus:border-primary focus:ring-ring/30"
-                      )}
-                    />
-                    {errors.name && (
-                      <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="size-3" aria-hidden="true" />
-                        {errors.name}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldFocus} <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldFocusPlaceholder}
-                      value={formData.focus}
-                      onChange={(e) => updateField("focus", e.target.value)}
-                      className={cn(
-                        "w-full rounded-lg border bg-card px-3.5 py-2.5 text-base font-medium text-foreground transition focus:outline-none focus:ring-2",
-                        errors.focus
-                          ? "border-red-500 focus:ring-red-500/30"
-                          : "border-input focus:border-primary focus:ring-ring/30"
-                      )}
-                    />
-                    {errors.focus && (
-                      <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="size-3" aria-hidden="true" />
-                        {errors.focus}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldPriorityAreas}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={t.createGuide.fieldPriorityAreasPlaceholder}
-                      value={formData.priorityAreas}
-                      onChange={(e) => updateField("priorityAreas", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-                </div>
-
-                {/* 2. Esquemas & Dificuldades */}
-                <div className="rounded-xl border border-border p-4 bg-card/60 space-y-3.5">
-                  <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-                    <Brain className="size-4 text-primary" aria-hidden="true" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {t.createGuide.section2Title}
-                    </h3>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldDifficulties} <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldDifficultiesPlaceholder}
-                      value={formData.currentDifficulties}
-                      onChange={(e) => updateField("currentDifficulties", e.target.value)}
-                      className={cn(
-                        "w-full rounded-lg border bg-card px-3.5 py-2.5 text-base font-medium text-foreground transition focus:outline-none focus:ring-2",
-                        errors.currentDifficulties
-                          ? "border-red-500 focus:ring-red-500/30"
-                          : "border-input focus:border-primary focus:ring-ring/30"
-                      )}
-                    />
-                    {errors.currentDifficulties && (
-                      <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="size-3" aria-hidden="true" />
-                        {errors.currentDifficulties}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldSchemas}
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldSchemasPlaceholder}
-                      value={formData.schemas}
-                      onChange={(e) => updateField("schemas", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldTrauma}
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldTraumaPlaceholder}
-                      value={formData.traumaExperiences}
-                      onChange={(e) => updateField("traumaExperiences", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-                </div>
-
-                {/* 3. Abordagens & Teologia */}
-                <div className="rounded-xl border border-border p-4 bg-card/60 space-y-3.5">
-                  <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-                    <Heart className="size-4 text-primary" aria-hidden="true" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {t.createGuide.section3Title}
-                    </h3>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldPsychologyLines}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={t.createGuide.fieldPsychologyLinesPlaceholder}
-                      value={formData.psychologyLines}
-                      onChange={(e) => updateField("psychologyLines", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-semibold text-foreground">
-                        {t.createGuide.fieldTheology}
-                      </label>
-                      <span
-                        className={cn(
-                          "text-[0.65rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded",
-                          theologyEnabled
-                            ? "bg-gold/20 text-gold-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {theologyEnabled
-                          ? t.createGuide.theologyActiveBadge
-                          : t.createGuide.theologyInactiveBadge}
-                      </span>
-                    </div>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldTheologyPlaceholder}
-                      value={formData.theologyCosmovision}
-                      onChange={(e) => updateField("theologyCosmovision", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                    <p className="mt-1 text-[0.7rem] text-muted-foreground">
-                      {theologyEnabled
-                        ? t.createGuide.theologyActiveNote
-                        : t.createGuide.theologyInactiveNote}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4. Rotina & Intensidade */}
-                <div className="rounded-xl border border-border p-4 bg-card/60 space-y-3.5">
-                  <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-                    <Clock className="size-4 text-primary" aria-hidden="true" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {t.createGuide.section4Title}
-                    </h3>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldRoutine}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={t.createGuide.fieldRoutinePlaceholder}
-                      value={formData.routineSchedule}
-                      onChange={(e) => updateField("routineSchedule", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-foreground mb-1">
-                        {t.createGuide.fieldWhatHelps}
-                      </label>
-                      <input
-                        type="text"
-                        placeholder={t.createGuide.fieldWhatHelpsPlaceholder}
-                        value={formData.whatHelps}
-                        onChange={(e) => updateField("whatHelps", e.target.value)}
-                        className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-foreground mb-1">
-                        {t.createGuide.fieldThingsToAvoid}
-                      </label>
-                      <input
-                        type="text"
-                        placeholder={t.createGuide.fieldThingsToAvoidPlaceholder}
-                        value={formData.thingsToAvoid}
-                        onChange={(e) => updateField("thingsToAvoid", e.target.value)}
-                        className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1.5">
-                      {t.createGuide.intensityLabel}
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateField("intensity", "muito leve")}
-                        className={cn(
-                          "flex flex-col gap-1 rounded-xl border p-3 text-left transition touch-manipulation",
-                          formData.intensity === "muito leve"
-                            ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30"
-                            : "border-border bg-card hover:border-primary/40"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground">{t.createGuide.intensityVeryLight}</span>
-                          {formData.intensity === "muito leve" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
-                        </div>
-                        <span className="text-[0.7rem] text-muted-foreground">{t.createGuide.intensityVeryLightDesc}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => updateField("intensity", "leve")}
-                        className={cn(
-                          "flex flex-col gap-1 rounded-xl border p-3 text-left transition touch-manipulation",
-                          formData.intensity === "leve"
-                            ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30"
-                            : "border-border bg-card hover:border-primary/40"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground">{t.createGuide.intensityLight}</span>
-                          {formData.intensity === "leve" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
-                        </div>
-                        <span className="text-[0.7rem] text-muted-foreground">{t.createGuide.intensityLightDesc}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => updateField("intensity", "moderada")}
-                        className={cn(
-                          "flex flex-col gap-1 rounded-xl border p-3 text-left transition touch-manipulation",
-                          formData.intensity === "moderada"
-                            ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30"
-                            : "border-border bg-card hover:border-primary/40"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground">{t.createGuide.intensityModerate}</span>
-                          {formData.intensity === "moderada" && <Check className="size-3.5 text-primary" aria-hidden="true" />}
-                        </div>
-                        <span className="text-[0.7rem] text-muted-foreground">{t.createGuide.intensityModerateDesc}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1">
-                      {t.createGuide.fieldNotes}
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder={t.createGuide.fieldNotesPlaceholder}
-                      value={formData.additionalNotes}
-                      onChange={(e) => updateField("additionalNotes", e.target.value)}
-                      className="w-full rounded-lg border border-input bg-card px-3.5 py-2.5 text-base font-medium text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: REVISÃO */}
-          {step === "review" && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-1">
-                <h3 className="font-serif text-base font-semibold text-primary">
-                  {t.createGuide.reviewSectionTitle}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {t.createGuide.reviewSummaryDesc}
-                </p>
-              </div>
-
-              {generationError && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-700 dark:text-red-300 flex items-start gap-2.5">
-                  <AlertCircle className="size-4 shrink-0 text-red-600 mt-0.5" aria-hidden="true" />
-                  <div className="space-y-1">
-                    <p className="font-bold">{t.createGuide.generationErrorTitle}</p>
-                    <p className="leading-relaxed">{generationError}</p>
-                  </div>
-                </div>
-              )}
-
-              {saveSuccessMsg && (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
-                  <Check className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-                  <span>{saveSuccessMsg}</span>
-                </div>
-              )}
-
-              {/* Summary Cards */}
-              <div className="space-y-3 text-xs">
-                <div className="rounded-xl border border-border p-4 bg-card space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold uppercase tracking-wider text-muted-foreground">1. Identificação</span>
-                    <span className="font-semibold text-primary text-sm">{formData.name}</span>
-                  </div>
-                  <div className="text-foreground/90 space-y-1">
-                    <p><strong>Foco:</strong> {formData.focus}</p>
-                    {formData.priorityAreas && <p><strong>Áreas prioritárias:</strong> {formData.priorityAreas}</p>}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border p-4 bg-card space-y-2">
-                  <span className="font-bold uppercase tracking-wider text-muted-foreground block">2. Esquemas & Dificuldades</span>
-                  <div className="text-foreground/90 space-y-1">
-                    <p><strong>Dificuldades atuais:</strong> {formData.currentDifficulties}</p>
-                    {formData.schemas && <p><strong>Esquemas:</strong> {formData.schemas}</p>}
-                    {formData.traumaExperiences && <p><strong>Traumas/experiências:</strong> {formData.traumaExperiences}</p>}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border p-4 bg-card space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold uppercase tracking-wider text-muted-foreground">3. Abordagens & Teologia</span>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[0.65rem] font-bold",
-                        theologyEnabled ? "bg-gold/20 text-gold-foreground" : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {theologyEnabled ? t.createGuide.theologyActiveBadge : t.createGuide.theologyInactiveBadge}
-                    </span>
-                  </div>
-                  <div className="text-foreground/90 space-y-1">
-                    {formData.psychologyLines && <p><strong>Linhas da psicologia:</strong> {formData.psychologyLines}</p>}
-                    {formData.theologyCosmovision ? (
-                      <p><strong>Cosmovisão:</strong> {formData.theologyCosmovision}</p>
-                    ) : (
-                      <p className="text-muted-foreground italic">{t.createGuide.theologyInactiveNotice}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border p-4 bg-card space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold uppercase tracking-wider text-muted-foreground">4. Rotina & Intensidade</span>
-                    <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-[0.65rem] font-bold capitalize">
-                      {formData.intensity}
-                    </span>
-                  </div>
-                  <div className="text-foreground/90 space-y-1">
-                    {formData.routineSchedule && <p><strong>Rotina:</strong> {formData.routineSchedule}</p>}
-                    {formData.whatHelps && <p><strong>O que ajuda:</strong> {formData.whatHelps}</p>}
-                    {formData.thingsToAvoid && <p><strong>Limites/Evitar:</strong> {formData.thingsToAvoid}</p>}
-                    {formData.additionalNotes && <p><strong>Observações:</strong> {formData.additionalNotes}</p>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Ready notice for AI generation */}
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
-                  <Sparkles className="size-4" aria-hidden="true" />
-                  <span>{t.createGuide.nextStepTitle}</span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {t.createGuide.nextStepDesc}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: PREVIEW DO GUIA GERADO */}
-          {step === "preview" && generatedGuide && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              {/* Header Card */}
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-3">
-                <div className="flex flex-wrap items-center gap-2 justify-between">
-                  <span className="rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-bold">
-                    {generatedGuide.config?.category || "Retomada"}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="rounded bg-muted px-2 py-0.5 text-[0.65rem] font-bold text-muted-foreground">
-                      {generatedGuide.contentLocale}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-0.5 text-[0.65rem] font-bold",
-                        generatedGuide.theologyEnabled
-                          ? "bg-gold/20 text-gold-foreground"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {generatedGuide.theologyEnabled
-                        ? t.createGuide.theologyActiveBadge
-                        : t.createGuide.theologyInactiveBadge}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-serif text-xl font-bold text-foreground">
-                    {generatedGuide.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    {generatedGuide.description}
-                  </p>
-                </div>
-
-                {profileSummary && (
-                  <div className="rounded-xl border border-border/80 bg-card p-3 text-xs space-y-1 text-foreground/90">
-                    <span className="font-bold text-primary block">{t.createGuide.profileSummaryLabel}</span>
-                    <p className="leading-relaxed">{profileSummary}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Sections Accordion */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Layers className="size-4 text-primary" aria-hidden="true" />
-                    <span>{t.createGuide.sectionsGeneratedLabel} ({generatedGuide.sections?.length || 0})</span>
-                  </h4>
-                </div>
-
-                <div className="space-y-2">
-                  {generatedGuide.sections?.map((sec, idx) => {
-                    const isExpanded = expandedSectionId === sec.id
-                    return (
-                      <div
-                        key={sec.id}
-                        className="rounded-xl border border-border bg-card overflow-hidden transition"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setExpandedSectionId(isExpanded ? null : sec.id)}
-                          className="w-full flex items-center justify-between p-3.5 text-left hover:bg-muted/40 transition touch-manipulation"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="font-serif text-xs font-bold text-primary shrink-0">
-                              {sec.number}
-                            </span>
-                            <div className="min-w-0">
-                              <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
-                                {sec.kicker}
-                              </span>
-                              <span className="text-xs font-semibold text-foreground truncate block">
-                                {sec.title}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {sec.scripture && (
-                              <span className="text-[0.65rem] bg-gold/15 text-gold-foreground rounded px-1.5 py-0.5 font-bold">
-                                {sec.scripture.verses?.length || 1} ref
-                              </span>
-                            )}
-                            {isExpanded ? (
-                              <ChevronUp className="size-4 text-muted-foreground" aria-hidden="true" />
-                            ) : (
-                              <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
-                            )}
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="border-t border-border/60 p-4 bg-muted/20 text-xs space-y-3 animate-in fade-in duration-150">
-                            {sec.blocks?.map((b, bIdx) => (
-                              <div key={bIdx} className="text-foreground/85 leading-relaxed">
-                                {b.type === "lead" && <p className="font-semibold text-foreground italic">{b.text}</p>}
-                                {b.type === "p" && <p>{b.text}</p>}
-                                {b.type === "h" && <h5 className="font-bold text-foreground mt-2">{b.text}</h5>}
-                                {b.type === "list" && (
-                                  <ul className="list-disc list-inside space-y-1 pl-1">
-                                    {b.items?.map((it, iIdx) => <li key={iIdx}>{it}</li>)}
-                                  </ul>
-                                )}
-                                {b.type === "note" && (
-                                  <div className="rounded-lg bg-primary/10 border-l-2 border-primary p-2 text-[0.75rem]">
-                                    {b.label && <strong className="block text-primary">{b.label}</strong>}
-                                    <span>{b.text}</span>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-
-                            {sec.scripture && (
-                              <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 text-xs space-y-1 text-gold-foreground">
-                                <span className="font-bold block">
-                                  {sec.scripture.verses?.map((v) => v.ref).join(" • ")}
-                                </span>
-                                {sec.scripture.comentario && (
-                                  <p className="text-foreground/80 italic">{sec.scripture.comentario}</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Weekly Plan (7 Days) Summary */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Calendar className="size-4 text-primary" aria-hidden="true" />
-                  <span>{t.createGuide.weeklyPlanLabel}</span>
-                </h4>
-
-                <div className="rounded-xl border border-border bg-card p-4 text-xs space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
-                    {[0, 1, 2, 3, 4, 5, 6].map((dayIdx) => {
-                      const dayTasks = (generatedGuide.weeklyPlan || []).filter((t) => t.dayIndex === dayIdx)
-                      return (
-                        <div
-                          key={dayIdx}
-                          className="rounded-lg border border-border/80 bg-muted/30 p-2.5 flex flex-col justify-between space-y-1"
-                        >
-                          <span className="font-bold text-primary text-[0.7rem] uppercase">
-                            {t.schedule.days[dayIdx]}
-                          </span>
-                          <span className="text-[0.65rem] text-muted-foreground">
-                            {dayTasks.length} {t.common.tasks}
-                          </span>
-                          <div className="space-y-1 pt-1 border-t border-border/40">
-                            {dayTasks.slice(0, 2).map((t, tIdx) => (
-                              <p key={tIdx} className="text-[0.65rem] text-foreground/90 truncate" title={t.description}>
-                                <strong className="text-primary/90">{t.time}</strong> {t.description}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Sheets & Safety Notes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                {generatedGuide.quickSheets && generatedGuide.quickSheets.length > 0 && (
-                  <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-                    <span className="font-bold uppercase tracking-wider text-muted-foreground block">
-                      {t.createGuide.quickSheetsLabel}
-                    </span>
-                    <ul className="space-y-1.5">
-                      {generatedGuide.quickSheets.map((qs, i) => (
-                        <li key={i} className="text-foreground/90">
-                          <strong className="text-primary">{qs.title}:</strong> {qs.summary}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {generatedGuide.safetyNotes && generatedGuide.safetyNotes.length > 0 && (
-                  <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-                    <span className="font-bold uppercase tracking-wider text-muted-foreground block">
-                      {t.createGuide.safetyNotesLabel}
-                    </span>
-                    <ul className="list-disc list-inside space-y-1 text-foreground/90">
-                      {generatedGuide.safetyNotes.map((note, i) => (
-                        <li key={i}>{note}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t border-border bg-muted/40 px-4 py-3 sm:px-6 shrink-0">
-          {step === "form" && (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
-              >
-                {t.common.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={handleProceedToReview}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
-              >
-                <span>{t.createGuide.btnReview}</span>
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </button>
-            </>
-          )}
-
-          {step === "review" && (
-            <>
-              <button
-                type="button"
-                onClick={() => setStep("form")}
-                disabled={isGenerating}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem] disabled:opacity-50"
-              >
-                <ArrowLeft className="size-3.5" aria-hidden="true" />
-                <span>{t.createGuide.btnEdit}</span>
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSaveSuccessMsg(t.createGuide.saveDraftSuccess)
-                  }}
-                  disabled={isGenerating}
-                  className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem] disabled:opacity-50"
-                >
-                  <Check className="size-3.5" aria-hidden="true" />
-                  <span>{t.createGuide.btnSaveDraft}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem] shadow-xs disabled:opacity-60"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                      <span>{t.createGuide.generatingTitle}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="size-3.5" aria-hidden="true" />
-                      <span>{t.createGuide.btnGenerate}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-
-          {step === "preview" && (
-            <div className="flex flex-col sm:flex-row w-full sm:items-center justify-between gap-2.5">
-              <div className="flex items-center justify-between sm:justify-start gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep("form")}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
-                >
-                  <ArrowLeft className="size-3.5" aria-hidden="true" />
-                  <span>{t.createGuide.btnEdit}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem] disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RotateCcw className="size-3.5" aria-hidden="true" />
-                  )}
-                  <span>{t.createGuide.btnRegenerate}</span>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-lg border border-border bg-card px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
-                >
-                  {t.common.cancel}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAndActivate}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem] shadow-xs"
-                >
-                  <Check className="size-3.5" aria-hidden="true" />
-                  <span>{t.createGuide.btnSaveAndActivate}</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+  const fields = [
+    { key: "name", label: copy("Título", "Title"), value: draft.name || copy("Minha Semana", "My Week") }, { key: "focus", label: copy("Foco", "Focus"), value: draft.focus }, { key: "currentDifficulties", label: copy("Contexto", "Context"), value: draft.currentDifficulties }, { key: "routineSchedule", label: copy("Rotina", "Routine"), value: draft.routineSchedule }, { key: "whatHelps", label: copy("O Que Ajuda", "What Helps"), value: draft.whatHelps }, { key: "thingsToAvoid", label: copy("Limites", "Limits"), value: draft.thingsToAvoid }, { key: "psychologyApproaches", label: copy("Abordagens", "Preferred Approaches"), value: draft.psychologyLines }, { key: "additionalNotes", label: copy("Instruções", "Instructions"), value: draft.additionalNotes },
+  ]
+  const optionalFields: { field: keyof GuideDraftData; label: string; hint?: string }[] = [
+    { field: "routineSchedule", label: copy("Tempo e Rotina", "Time and Routine") }, { field: "whatHelps", label: copy("O Que Costuma Ajudar?", "What Usually Helps?") }, { field: "thingsToAvoid", label: copy("O Que Evitar ou Adaptar?", "What Should Be Avoided or Adapted?") }, { field: "additionalNotes", label: copy("Suas Instruções", "Your Instructions"), hint: copy("Tom, temas, acessibilidade, formato ou qualquer preferência sua.", "Tone, themes, accessibility, format or any preference of your own.") },
+  ]
+  return <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="create-guide-title" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5">
+    <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={close} aria-hidden="true" />
+    <div className="relative flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border border-border bg-card shadow-2xl">
+      <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-5 sm:px-7"><div className="flex items-center gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><BookOpen className="size-5" aria-hidden="true" /></span><div><p className="eyebrow text-primary">{copy("SETE DIAS, DO SEU JEITO", "SEVEN DAYS, YOUR WAY")}</p><h2 id="create-guide-title" className="mt-1 font-serif text-xl">{titleCase(step === "form" ? copy("Uma Semana Possível", "A Manageable Week") : step === "share" ? copy("Escolha o Que Compartilhar", "Choose What to Share") : copy("Sua Semana, do Seu Jeito", "Your Week, Your Way"))}</h2></div></div><button type="button" className="icon-button" onClick={close} aria-label={t.common.close}><X className="size-5" aria-hidden="true" /></button></header>
+      <div className="overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+        {error && <p ref={errorRef} tabIndex={-1} role="alert" className="mb-5 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{error}</p>}
+        {draftError && <p role="status" className="mb-5 rounded-xl border border-border p-3 text-xs text-destructive">{copy("O rascunho não foi salvo. Mantenha esta janela aberta até terminar.", "The draft was not saved. Keep this window open until you finish.")}</p>}
+        {step === "form" && <form id="guide-draft-form" onSubmit={(event) => { event.preventDefault(); previewLocal() }} className="space-y-6">
+          <p className="text-sm leading-relaxed text-muted-foreground">{copy("Escolha uma semana pronta ou comece do zero. Os modelos funcionam sem IA; você pode mudar qualquer dia, seção ou campo.", "Choose a ready-made week or start from scratch. Presets work without AI; you can change any day, section or field.")}</p>
+          <fieldset><legend className="mb-3 text-sm font-medium">{titleCase(copy("Como Quer Começar?", "How Would You Like to Start?"))}</legend><div className="grid gap-2 sm:grid-cols-2">{getPlannerPresets(locale).map((option) => <label key={option.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-4", preset === option.id ? "border-primary bg-primary/5" : "border-border")}><input type="radio" name="planner-preset" checked={preset === option.id} onChange={() => setPreset(option.id)} className="mt-1 size-4 shrink-0" /><span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.description}</span></span></label>)}</div></fieldset>
+          <DraftField field="name" label={copy("Título da Semana · Opcional", "Week Title · Optional")} value={draft.name} onChange={(value) => updateField("name", value)} hint={copy("Por exemplo: Uma Semana Mais Leve. Deixe em branco para usar o título do modelo.", "For example: A Lighter Week. Leave blank to use the preset title.")} />
+          <DraftField field="focus" label={copy("Um Foco Pequeno · Opcional", "One Small Focus · Optional")} value={draft.focus} onChange={(value) => updateField("focus", value)} hint={copy("Descansar melhor, voltar a estudar ou abrir espaço para uma caminhada.", "Rest a little more, return to studying or make room for a walk.")} />
+          <details className="rounded-2xl border border-border p-4 sm:p-5"><summary className="cursor-pointer text-sm font-medium">{titleCase(copy("Mais Opções e Instruções · Tudo Opcional", "More Options and Instructions · All Optional"))}</summary><div className="mt-5 space-y-5">{optionalFields.map((field) => <DraftField key={field.field} {...field} value={draft[field.field]} onChange={(value) => updateField(field.field, value)} multiline />)}
+            <fieldset><legend className="mb-2 text-sm font-medium">{titleCase(copy("Ritmo para as Sugestões da IA", "Pace for AI Suggestions"))}</legend><div className="flex flex-wrap gap-2">{([{ value: "muito leve", label: copy("Bem Leve", "Very Light") }, { value: "leve", label: copy("Leve", "Light") }, { value: "moderada", label: copy("Mais Estrutura", "More Structure") }] as const).map((option) => <label key={option.value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm", draft.intensity === option.value ? "border-primary bg-primary/5" : "border-border")}><input type="radio" name="guide-intensity" checked={draft.intensity === option.value} onChange={() => updateField("intensity", option.value)} />{option.label}</label>)}</div></fieldset>
+            <details className="rounded-xl bg-muted/30 p-4"><summary className="cursor-pointer text-sm text-muted-foreground">{titleCase(copy("Contexto Pessoal e Espiritualidade", "Personal Context and Spirituality"))}</summary><div className="mt-4 space-y-5"><DraftField field="currentDifficulties" label={copy("Contexto Que Deseja Incluir", "Context You Wish to Include")} value={draft.currentDifficulties} onChange={(value) => updateField("currentDifficulties", value)} multiline /><DraftField field="psychologyLines" label={copy("Abordagens Que Prefere", "Approaches You Prefer")} value={draft.psychologyLines} onChange={(value) => updateField("psychologyLines", value)} /><label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={spiritualityEnabled} onChange={(event) => { setSpiritualityEnabled(event.target.checked); setAIConsent(false) }} className="mt-1 size-4" />{copy("Incluir minha espiritualidade nas sugestões da IA", "Include my spirituality in AI suggestions")}</label>{spiritualityEnabled && <DraftField field="theologyCosmovision" label={copy("Minha Preferência Espiritual", "My Spiritual Preference")} value={draft.theologyCosmovision} onChange={(value) => updateField("theologyCosmovision", value)} multiline />}</div></details>
+            <p className="text-xs leading-relaxed text-muted-foreground">{copy("Sem IA, foco, rotina, limites e instruções viram anotações suas; não alteram automaticamente os passos. Ajuste os dias depois de salvar.", "Without AI, focus, routine, limits and instructions become your own notes; they do not automatically rewrite the steps. Adjust the days after saving.")}</p>
+          </div></details>
+          <div className="rounded-2xl border border-border p-4"><p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 text-primary" aria-hidden="true" />{copy("Ajuda da IA · Opcional", "AI Assistance · Optional")}</p><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{copy("Peça ideias para os campos ou um plano semanal. Você revisa antes de enviar e antes de salvar.", "Ask for ideas for the fields or a weekly plan. You review before sharing and before saving.")}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => share("assist")} disabled={available !== true} className="min-h-11 rounded-xl border border-border px-3 text-sm text-primary disabled:opacity-50">{copy("Ajudar a Preencher", "Help Fill the Fields")}</button><button type="button" onClick={() => share("plan")} disabled={available !== true} className="min-h-11 rounded-xl border border-border px-3 text-sm text-primary disabled:opacity-50">{copy("Criar Plano com IA", "Create a Plan with AI")}</button></div>{available !== true && <p role="status" className="mt-2 text-xs text-muted-foreground">{demo.enabled ? copy("A IA está desativada no demo. Todos os modelos funcionam.", "AI is off in the demo. Every preset still works.") : available === null ? copy("Verificando disponibilidade da IA…", "Checking AI availability…") : copy("A IA está indisponível. Continue com qualquer modelo pronto.", "AI is unavailable. Continue with any ready-made week.")}</p>}</div>
+          {suggestions && <section aria-label={copy("Sugestões para Revisar", "Suggestions to Review")} className="rounded-2xl border border-primary/25 bg-primary/5 p-5"><h3 className="text-sm font-semibold">{titleCase(copy("Ideias da IA para Revisar", "AI Ideas to Review"))}</h3><dl className="mt-4 space-y-3">{Object.entries(suggestions).map(([key, value]) => <div key={key}><dt className="text-xs font-medium text-primary">{fields.find((field) => field.key === key)?.label || key}</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{value}</dd></div>)}</dl><p className="mt-3 text-xs text-muted-foreground">{copy("As sugestões preenchem só campos vazios. Você pode editar todas.", "Suggestions fill empty fields only. You can edit every one.")}</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={applySuggestions} className="primary-button">{copy("Usar nos Campos Vazios", "Use in Empty Fields")}</button><button type="button" onClick={() => setSuggestions(null)} className="min-h-11 rounded-xl px-3 text-sm text-muted-foreground hover:bg-accent">{copy("Descartar", "Dismiss")}</button></div></section>}
+          <p className="text-xs text-muted-foreground">{copy("O rascunho fica neste navegador. Você decide se compartilha preferências com a IA.", "Your draft stays in this browser. You decide whether to share preferences with AI.")}</p>
+        </form>}
+        {step === "share" && <div className="space-y-5"><p className="text-sm text-muted-foreground">{aiPurpose === "assist" ? copy("A IA vai sugerir textos para os campos. Você escolhe quais usar.", "AI will suggest text for the fields. You decide what to use.") : copy("A IA vai propor seções e pequenos passos para sete dias.", "AI will propose sections and small steps for seven days.")}</p><dl className="space-y-4 rounded-2xl border border-border p-5">{fields.filter((field) => field.value.trim()).map((field) => <div key={field.key}><dt className="text-xs font-medium text-primary">{field.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm">{field.value}</dd></div>)}<div><dt className="text-xs font-medium text-primary">{copy("Ritmo", "Pace")}</dt><dd className="mt-1 text-sm">{draft.intensity === "muito leve" ? copy("Bem Leve", "Very Light") : draft.intensity === "leve" ? copy("Leve", "Light") : copy("Mais Estrutura", "More Structure")}</dd></div>{spiritualityEnabled && <div><dt className="text-xs font-medium text-primary">{copy("Espiritualidade", "Spirituality")}</dt><dd className="mt-1 text-sm">{draft.theologyCosmovision || copy("Nenhuma preferência informada", "No preference entered")}</dd></div>}</dl><div className="rounded-2xl border border-primary/20 bg-primary/5 p-5"><p className="text-sm leading-relaxed text-muted-foreground">{copy("As preferências acima serão enviadas pelo servidor do app ao Google Gemini. Podem incluir saúde ou crenças. Evite nomes completos, contatos e relatos detalhados. As respostas podem conter erros e não substituem cuidados profissionais.", "The preferences above will be sent through the app’s server to Google Gemini. They may include health or beliefs. Avoid full names, contact details and detailed accounts. Responses can contain errors and do not replace professional care.")}</p><div className="mt-3 flex flex-wrap gap-4 text-xs"><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">{copy("Privacidade Google ↗", "Google Privacy ↗")}</a><a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">{copy("Termos Gemini ↗", "Gemini Terms ↗")}</a></div><label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-primary/20 bg-card p-4"><input type="checkbox" checked={aiConsent} onChange={(event) => setAIConsent(event.target.checked)} disabled={isGenerating} className="mt-1 size-4 shrink-0" /><span className="text-sm leading-relaxed">{copy("Quero enviar essas preferências ao Google Gemini para esta proposta e entendo que a IA pode errar.", "I want to send these preferences to Google Gemini for this proposal and understand that AI can be wrong.")}</span></label></div>{isGenerating && <p role="status" aria-live="polite" className="flex items-center gap-3 text-sm"><Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />{copy("Preparando sugestões para revisar…", "Preparing suggestions for you to review…")}</p>}</div>}
+        {step === "preview" && generatedGuide && <div className="space-y-5"><div className="rounded-2xl border border-primary/20 bg-primary/5 p-5"><p className="eyebrow text-primary">{guideSource === "ai" ? copy("PROPOSTA DA IA", "AI PROPOSAL") : copy("SEMANA PRONTA · SEM IA", "READY-MADE WEEK · NO AI")}</p><h3 className="mt-2 font-serif text-2xl">{titleCase(generatedGuide.title)}</h3><p className="mt-2 text-sm text-muted-foreground">{copy("Um pequeno passo por dia. Pode adaptar, pular ou descansar.", "One small step per day. You can adapt, skip or rest.")}</p></div><ol className="grid gap-2 sm:grid-cols-2">{Array.from({ length: 7 }, (_, dayIndex) => <li key={dayIndex} className="rounded-xl border border-border p-4"><p className="text-xs font-semibold text-primary">{copy("Dia", "Day")} {dayIndex + 1}</p><p className="mt-2 text-sm leading-relaxed">{generatedGuide.weeklyPlan.filter((activity) => activity.dayIndex === dayIndex).map((activity) => activity.description).join(" · ") || copy("Espaço livre. Acrescente um passo se quiser.", "Open space. Add a step if you wish.")}</p></li>)}</ol><details className="rounded-2xl border border-border p-4 sm:p-5"><summary className="cursor-pointer text-sm font-medium">{titleCase(copy("Personalizar Seções e Campos", "Customize Sections and Fields"))} · {generatedGuide.sections.length}</summary><div className="mt-5"><GuideSectionEditor sections={generatedGuide.sections} en={en} onChange={(sections) => { setGeneratedGuide({ ...generatedGuide, sections }); setError(null) }} /></div></details><p className="text-xs text-muted-foreground">{copy("Você pode editar os dias e continuar personalizando depois de salvar.", "You can edit the days and continue customizing after saving.")}</p></div>}
       </div>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4 sm:px-7">{step === "form" ? <><button type="button" onClick={reset} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-xs text-muted-foreground hover:bg-accent"><RotateCcw className="size-4" aria-hidden="true" />{copy("Limpar Rascunho", "Clear Draft")}</button><button type="submit" form="guide-draft-form" className="primary-button">{copy("Ver Minha Semana", "Preview My Week")}<ArrowRight className="size-4" aria-hidden="true" /></button></> : step === "share" ? <><button type="button" onClick={() => setStep("form")} disabled={isGenerating} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm hover:bg-accent"><ArrowLeft className="size-4" aria-hidden="true" />{copy("Voltar", "Back")}</button><button type="button" onClick={generate} disabled={!aiConsent || isGenerating || available !== true || demo.enabled} className="primary-button"><Sparkles className="size-4" aria-hidden="true" />{copy("Pedir Proposta à IA", "Ask AI for a Proposal")}</button></> : <><button type="button" onClick={() => setStep("form")} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm hover:bg-accent"><ArrowLeft className="size-4" aria-hidden="true" />{copy("Voltar", "Back")}</button><button type="button" onClick={save} disabled={storageReadOnly} className="primary-button"><Check className="size-4" aria-hidden="true" />{copy("Usar Esta Semana", "Use This Week")}</button></>}</footer>
     </div>
-  )
+  </div>
 }

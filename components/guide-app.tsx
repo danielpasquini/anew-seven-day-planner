@@ -1,704 +1,123 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import {
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  List,
-  Plus,
-  RotateCcw,
-  Trash2,
-  X,
-  BookOpen,
-  Settings,
-  Sun,
-  Moon,
-  Monitor,
-  CheckCircle2,
-  Sparkles,
-  Check,
-  AlertCircle,
-  CloudOff,
-  RefreshCw,
-} from "lucide-react"
-import { DEFAULT_GUIDE_TEMPLATE, intro, sections } from "@/lib/guide-data"
+import { useEffect, useMemo, useState } from "react"
+import { ArrowRight, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, Download, Loader2, MoreHorizontal, Plus, RotateCcw, Settings, ShieldCheck, Trash2, X } from "lucide-react"
+import { type GuideTemplate } from "@/lib/guide-data"
+import { buildPresetGuide } from "@/lib/planner"
 import { useStore, type WeekInstance } from "@/lib/store"
-import { BibleProvider } from "@/lib/bible/bible-provider"
-import { formatDateRangeLocale } from "@/lib/date-utils"
+import { formatDateRangeLocale, getTodayFormatted, getWeekDays } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
+import { titleCase } from "@/lib/title-case"
 import { SectionCard } from "@/components/section-card"
+import { InteractiveScheduleBlock } from "@/components/schedule-block"
 import { CreateWeekModal, DeleteWeekModal } from "@/components/week-modal"
+import { CreateGuideModal } from "@/components/create-guide-modal"
+import { EditGuideSectionsModal } from "@/components/edit-guide-sections-modal"
+import { PlannerTutorial } from "@/components/planner-tutorial"
 import { SettingsModal } from "@/components/settings-modal"
 import { CompleteWeekModal } from "@/components/complete-week-modal"
 import { WeekReviewCard } from "@/components/week-review-card"
 import { MyGuidesModal } from "@/components/my-guides-modal"
-import { MigrationBanner } from "@/components/migration-banner"
+import { ResourceLibrary } from "@/components/resource-library"
+import { PrivacyPanel } from "@/components/privacy-panel"
+import { useModalAccessibility } from "@/components/modal-accessibility"
+import { AuthDialog, AuthScreen } from "@/components/auth-screen"
+import { BrandMark } from "@/components/brand-mark"
+import { AccountDeletionNotice } from "@/components/account-deletion"
+import { useAuth } from "@/lib/auth/client"
+import { SoundControl } from "@/components/sound-control"
+import { useDemo } from "@/lib/demo"
 
-export function GuideApp() {
-  const {
-    weeks,
-    activeWeek,
-    activeGuide,
-    selectWeek,
-    hasPrevWeek,
-    hasNextWeek,
-    prevWeek,
-    nextWeek,
-    resetActiveWeek,
-    theme,
-    setTheme,
-    locale,
-    bibleVersion,
-    t,
-    saveStatus,
-    retrySync,
-  } = useStore()
-
-  const [navOpen, setNavOpen] = useState(false)
-  const [weeksDrawerOpen, setWeeksDrawerOpen] = useState(false)
-  const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [completeModalOpen, setCompleteModalOpen] = useState(false)
-  const [myGuidesModalOpen, setMyGuidesModalOpen] = useState(false)
+export function GuideApp({ initialPreview = false, initialAuthMode = "login", previewGuide, onPersonalize }: { initialPreview?: boolean; initialAuthMode?: "login" | "register"; previewGuide?: GuideTemplate | null; onPersonalize?: () => void }) {
+  const demo = useDemo()
+  const { status: authStatus, user, legalAccepted, signOut, deletionResult } = useAuth()
+  const fullAccess = demo.enabled || (authStatus === "authenticated" && Boolean(user?.emailVerified) && legalAccepted)
+  const [previewRequested, setPreviewRequested] = useState(initialPreview)
+  const [authOpen, setAuthOpen] = useState(false)
+  const { ready, weeks, activeWeek: storedWeek, activeGuide: storedGuide, selectWeek, hasPrevWeek, hasNextWeek, prevWeek, nextWeek, resetActiveWeek, locale, setLocale, t, saveStatus, retrySync, storageWarning, storageReadOnly, starterIsPreview, useStarterWeek } = useStore()
+  const [weeksOpen, setWeeksOpen] = useState(false)
+  const [createWeekOpen, setCreateWeekOpen] = useState(false)
+  const [createGuideOpen, setCreateGuideOpen] = useState(false)
+  const [completeOpen, setCompleteOpen] = useState(false)
+  const [myGuidesOpen, setMyGuidesOpen] = useState(false)
+  const [sectionsOpen, setSectionsOpen] = useState(false)
   const [weekToDelete, setWeekToDelete] = useState<WeekInstance | null>(null)
-  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">("semanas")
-  const [activeSection, setActiveSection] = useState(sections[0]?.id)
-  const [showMigrationBanner, setShowMigrationBanner] = useState(false)
-
-  const guideSections = activeGuide.sections || sections
-  const guideIntro = activeGuide.intro || intro
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">("aparencia")
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [resourcesOpen, setResourcesOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
+    const en = locale === "en-US"
+  const copy = (pt: string, english: string) => en ? english : pt
+  const fallbackPreview = useMemo(() => buildPresetGuide("gentle", locale), [locale])
+  const activeGuide = fullAccess ? storedGuide : previewGuide || fallbackPreview
+  const activeWeek = fullAccess ? storedWeek : null
+  const samplePreview = !fullAccess || starterIsPreview
+  const readOnly = samplePreview || storageReadOnly
+  const guideSections = activeGuide.sections.map((section) => ({ ...section, blocks: section.blocks.filter((block) => block.type !== "schedule") })).filter((section) => section.blocks.length > 0)
+  const guideWeeks = weeks.filter((week) => (week.guideId || week.templateId) === activeGuide.id)
+  const activities = activeWeek?.programacao.activities || activeGuide.weeklyPlan
+  const startDate = activeWeek?.startDate || getTodayFormatted()
+  const days = getWeekDays(startDate, locale)
+  const dateRange = activeWeek ? formatDateRangeLocale(activeWeek.startDate, activeWeek.endDate, locale) : copy("Uma prévia para os próximos sete dias", "A preview for the next seven days")
+  const tourKey = `anew-planner-tour:${demo.enabled ? "demo" : user?.uid || "preview"}:v1`
+  const tourStorage = () => demo.enabled ? demo.demoStorage : localStorage
+  const closeTour = () => { try { tourStorage()?.setItem(tourKey, "seen") } catch {} setTourOpen(false) }
+  const moreRef = useModalAccessibility(moreOpen, () => setMoreOpen(false))
+  const weeksRef = useModalAccessibility(weeksOpen, () => setWeeksOpen(false))
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActiveSection(entry.target.id)
-        }
-      },
-      { rootMargin: "-20% 0px -70% 0px", threshold: 0 },
-    )
-    for (const s of guideSections) {
-      const el = document.getElementById(s.id)
-      if (el) observer.observe(el)
-    }
-    return () => observer.disconnect()
-  }, [guideSections])
+    if (!ready || !fullAccess && !previewRequested) return
+    try { if (tourStorage()?.getItem(tourKey) !== "seen") setTourOpen(true) } catch { setTourOpen(true) }
+  }, [ready, fullAccess, previewRequested, tourKey, demo.demoStorage])
 
-  const handleReset = () => {
-    if (window.confirm(t.hero.resetWeekConfirm)) {
-      resetActiveWeek()
-    }
-  }
+  const requireAccount = (action: () => void) => { if (!fullAccess) setAuthOpen(true); else if (storageReadOnly) { setSettingsTab("exportacao"); setSettingsOpen(true) } else action() }
+  const openSettings = (tab: typeof settingsTab) => { if (!fullAccess) setAuthOpen(true); else { setSettingsTab(storageReadOnly ? "exportacao" : tab); setSettingsOpen(true) } }
+  const useSample = () => requireAccount(useStarterWeek)
+  const startDemo = () => demo.startDemo(previewGuide || fallbackPreview)
+  const leave = () => { setMoreOpen(false); if (demo.enabled) demo.exitDemo(); else void signOut().catch(() => setAuthOpen(true)) }
+  const showExtra = (kind: "resources" | "privacy") => { setMoreOpen(false); if (kind === "resources") setResourcesOpen(true); else setPrivacyOpen(true); requestAnimationFrame(() => document.getElementById(kind === "resources" ? "additional-resources" : "additional-privacy")?.scrollIntoView({ behavior: "instant", block: "start" })); requestAnimationFrame(() => document.querySelector<HTMLDetailsElement>(kind === "resources" ? "#additional-resources > summary" : "#additional-privacy > summary")?.focus({ preventScroll: true })) }
+  const weekList = <div className="space-y-2">{guideWeeks.map((week) => <div key={week.id} className={cn("flex items-center gap-1 rounded-xl border p-1", week.id === activeWeek?.id ? "border-primary/30 bg-primary/5" : "border-border")}><button type="button" onClick={() => { selectWeek(week.id); setWeeksOpen(false) }} aria-pressed={week.id === activeWeek?.id} className="min-w-0 flex-1 rounded-lg px-3 py-3 text-left hover:bg-accent"><span className="flex items-center gap-2 text-sm font-medium">{week.title}{week.status === "completed" && <CheckCircle2 className="size-4 text-primary" aria-label={t.common.completed} />}</span><span className="mt-1 block text-xs text-muted-foreground">{formatDateRangeLocale(week.startDate, week.endDate, locale)}</span></button>{guideWeeks.length > 1 && !storageReadOnly && <button type="button" onClick={() => setWeekToDelete(week)} className="icon-button text-muted-foreground hover:text-destructive" aria-label={`${copy("Excluir", "Delete")} ${week.title}`}><Trash2 className="size-4" aria-hidden="true" /></button>}</div>)}</div>
+  if (!fullAccess && !previewRequested) return <AuthScreen initialMode={initialAuthMode} onGuest={() => setPreviewRequested(true)} onDemo={demo.available ? startDemo : undefined} />
 
-  const dateRangeStr = activeWeek
-    ? formatDateRangeLocale(activeWeek.startDate, activeWeek.endDate, locale)
-    : ""
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Sticky header — safe-area-top handled via pt in inner div */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-        {/* Safe area top padding for iOS notch */}
-        <div
-          className="mx-auto flex max-w-7xl items-center justify-between gap-1.5 px-3 py-2 sm:gap-2 sm:px-6 sm:py-2.5"
-          style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top, 0.5rem))" }}
-        >
-          {/* Logo & Guide Template Title */}
-          <div className="flex items-center gap-2 min-w-0 shrink">
-            <a
-              href="#topo"
-              className="flex items-center gap-2 font-serif text-sm font-semibold text-primary min-w-0"
-            >
-              <BookOpen className="size-4 hidden sm:block text-primary shrink-0" aria-hidden="true" />
-              <span className="truncate max-w-[7rem] xs:max-w-none sm:max-w-[14rem]">
-                {activeGuide ? activeGuide.title : DEFAULT_GUIDE_TEMPLATE.title}
-              </span>
-            </a>
-          </div>
-
-          {/* Week Selector — visible on all sizes */}
-          {activeWeek && (
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={prevWeek}
-                disabled={!hasPrevWeek}
-                className={cn(
-                  "flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card transition touch-manipulation",
-                  hasPrevWeek
-                    ? "text-foreground hover:bg-accent cursor-pointer"
-                    : "text-muted-foreground border-border/50 cursor-not-allowed"
-                )}
-                aria-label="Semana anterior"
-                title="Semana anterior"
-              >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setWeeksDrawerOpen(true)}
-                className="flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15 transition touch-manipulation max-w-[8rem] sm:max-w-[14rem]"
-                title="Trocar de semana"
-              >
-                <Calendar className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
-                <span className="truncate">{activeWeek.title}</span>
-                {activeWeek.status === "completed" ? (
-                  <span className="rounded bg-primary/20 text-[0.65rem] px-1 py-0.2 font-bold shrink-0">
-                    {t.common.completed} · {activeWeek.progresso.percentual}%
-                  </span>
-                ) : (
-                  <span className="hidden lg:inline text-[0.7rem] font-normal text-primary/70 shrink-0">
-                    ({dateRangeStr})
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={nextWeek}
-                disabled={!hasNextWeek}
-                className={cn(
-                  "flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card transition touch-manipulation",
-                  hasNextWeek
-                    ? "text-foreground hover:bg-accent cursor-pointer"
-                    : "text-muted-foreground border-border/50 cursor-not-allowed"
-                )}
-                aria-label="Próxima semana"
-                title="Próxima semana"
-              >
-                <ChevronRight className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          )}
-
-          {/* Right Action Controls */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Realtime Save / Sync Status Badge */}
-            {saveStatus !== "idle" && (
-              <div
-                className={cn(
-                  "hidden sm:flex items-center gap-1 rounded-md px-2 py-1 text-[0.7rem] font-medium transition",
-                  saveStatus === "saving" && "bg-primary/10 text-primary",
-                  saveStatus === "saved" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                  saveStatus === "error" && "bg-destructive/10 text-destructive cursor-pointer hover:bg-destructive/20",
-                  saveStatus === "offline" && "bg-muted text-muted-foreground"
-                )}
-                onClick={saveStatus === "error" ? retrySync : undefined}
-                title={saveStatus === "error" ? t.sync.retry : undefined}
-                role={saveStatus === "error" ? "button" : undefined}
-                tabIndex={saveStatus === "error" ? 0 : undefined}
-              >
-                {saveStatus === "saving" && <RefreshCw className="size-3 animate-spin" aria-hidden="true" />}
-                {saveStatus === "saved" && <Check className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />}
-                {saveStatus === "error" && <AlertCircle className="size-3" aria-hidden="true" />}
-                {saveStatus === "offline" && <CloudOff className="size-3" aria-hidden="true" />}
-                <span>
-                  {saveStatus === "saving" && t.sync.saving}
-                  {saveStatus === "saved" && t.sync.saved}
-                  {saveStatus === "error" && t.sync.error}
-                  {saveStatus === "offline" && t.sync.offline}
-                </span>
-              </div>
-            )}
-
-            {/* Completar Semana */}
-            {activeWeek && activeWeek.status === "active" && (
-              <button
-                type="button"
-                onClick={() => setCompleteModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation"
-                aria-label={t.nav.completeWeek}
-              >
-                <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">{t.nav.completeWeek}</span>
-                <span className="sm:hidden">{t.common.completed}</span>
-              </button>
-            )}
-
-            {/* Theme toggle — icon only on mobile */}
-            <button
-              type="button"
-              onClick={() => {
-                const nextTheme = theme === "light" ? "dark" : theme === "dark" ? "system" : "light"
-                setTheme(nextTheme)
-              }}
-              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
-              title={`Tema: ${theme === "light" ? "Claro" : theme === "dark" ? "Escuro" : "Sistema"}. Clique para alterar.`}
-              aria-label="Alternar modo de exibição"
-            >
-              {theme === "light" && <Sun className="size-3.5 text-amber-500 shrink-0" aria-hidden="true" />}
-              {theme === "dark" && <Moon className="size-3.5 text-indigo-400 shrink-0" aria-hidden="true" />}
-              {theme === "system" && <Monitor className="size-3.5 text-muted-foreground shrink-0" aria-hidden="true" />}
-              <span className="hidden md:inline text-xs font-semibold capitalize">
-                {theme === "light" ? "Claro" : theme === "dark" ? "Escuro" : "Sistema"}
-              </span>
-            </button>
-
-            {/* Meus Guias */}
-            <button
-              type="button"
-              onClick={() => setMyGuidesModalOpen(true)}
-              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
-              title={t.nav.myGuides}
-              aria-label={t.nav.myGuides}
-            >
-              <BookOpen className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden md:inline text-xs font-semibold">{t.nav.myGuides}</span>
-            </button>
-
-            {/* Settings */}
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsTab("semanas")
-                setSettingsModalOpen(true)
-              }}
-              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground hover:bg-accent hover:border-primary/40 transition touch-manipulation sm:h-auto sm:w-auto sm:px-2.5 sm:py-1.5 sm:gap-1.5"
-              title={t.nav.settings}
-              aria-label={t.nav.settings}
-            >
-              <Settings className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden md:inline text-xs font-semibold">{t.nav.settings}</span>
-            </button>
-
-            {/* Nova Semana */}
-            <button
-              type="button"
-              onClick={() => setCreateModalOpen(true)}
-              className="hidden lg:flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition touch-manipulation"
-              aria-label={t.nav.newWeek}
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-              <span>{t.nav.newWeek}</span>
-            </button>
-
-            {/* Mobile: Weeks drawer */}
-            <button
-              type="button"
-              onClick={() => setWeeksDrawerOpen(true)}
-              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-accent lg:hidden touch-manipulation"
-              aria-label={t.nav.weeks}
-              title={t.nav.weeks}
-            >
-              <Calendar className="size-4" aria-hidden="true" />
-            </button>
-
-            {/* Mobile: TOC drawer */}
-            <button
-              type="button"
-              onClick={() => setNavOpen(true)}
-              className="flex size-8 min-w-[2rem] items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-accent lg:hidden touch-manipulation"
-              aria-label={t.nav.index}
-              title={t.nav.index}
-            >
-              <List className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <div id="topo" className="scroll-mt-16 border-b border-border bg-secondary/40">
-        <div className="mx-auto max-w-3xl px-4 py-8 text-center sm:px-6 sm:py-14">
-          <div className="mb-4 inline-flex items-center gap-2 flex-wrap justify-center rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold-foreground">
-            <Calendar className="size-3" aria-hidden="true" />
-            <span>
-              {activeWeek ? `${activeWeek.title} · ${dateRangeStr}` : "Período de 7 dias"}
-            </span>
-            {activeWeek?.status === "completed" && (
-              <span className="rounded bg-primary/20 text-primary px-2 py-0.2 text-[0.65rem] font-bold">
-                {t.common.completed} · {activeWeek.progresso.percentual}%
-              </span>
-            )}
-          </div>
-
-          <h1 className="font-serif text-2xl font-semibold leading-tight text-primary text-balance sm:text-4xl md:text-5xl">
-            {activeGuide.title}
-          </h1>
-          <p className="mx-auto mt-3 max-w-xl font-serif text-sm italic leading-relaxed text-foreground/90 text-pretty sm:text-base sm:mt-4 md:text-lg">
-            {activeGuide.description || t.hero.subtitle}
-          </p>
-
-          {/* Action button in Hero if week is active */}
-          {activeWeek && activeWeek.status === "active" && (
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => setCompleteModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 transition touch-manipulation"
-              >
-                <Sparkles className="size-4" aria-hidden="true" />
-                <span>{t.nav.completeWeek}</span>
-              </button>
-            </div>
-          )}
-
-          {/* Prayer & Psalm (Only when theologyEnabled is true) */}
-          {activeGuide.theologyEnabled && activeGuide.intro?.oracao && (
-            <div className="mx-auto mt-6 max-w-xl rounded-xl border border-primary/20 bg-card/80 p-4 sm:p-5 shadow-xs text-left">
-              <p className="text-xs font-bold uppercase tracking-wider text-primary/80 mb-1">
-                {t.scripture.prayer}
-              </p>
-              <p className="font-serif text-sm italic leading-relaxed text-foreground/90 text-pretty">
-                &quot;{activeGuide.intro.oracao}&quot;
-              </p>
-
-              {activeGuide.intro.salmo && (
-                <div className="mt-3 pt-3 border-t border-border/80">
-                  <p className="text-xs font-semibold text-primary mb-1">
-                    {activeGuide.intro.salmo.ref}
-                  </p>
-                  <p className="font-serif text-xs italic leading-relaxed text-muted-foreground text-pretty">
-                    {BibleProvider.resolvePassage(activeGuide.intro.salmo.ref, bibleVersion, locale).text || activeGuide.intro.salmo.ara}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Main Body Layout */}
-      <div className="mx-auto flex max-w-7xl gap-6 px-3 py-6 sm:gap-8 sm:px-6 sm:py-8">
-        {/* Desktop Left Sidebar */}
-        <aside className="hidden w-64 shrink-0 xl:block xl:w-72 space-y-6">
-          <div className="rounded-xl border border-border bg-card p-4 shadow-xs sticky top-20">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="size-4 text-primary" aria-hidden="true" />
-                <h3 className="font-serif text-sm font-semibold text-foreground">{t.nav.weeks}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCreateModalOpen(true)}
-                className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition shadow-xs touch-manipulation"
-              >
-                <Plus className="size-3" aria-hidden="true" />
-                <span>{t.common.create}</span>
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-1.5 max-h-[28vh] overflow-y-auto pr-1">
-              {weeks.map((w) => {
-                const isActive = w.id === activeWeek?.id
-                const isCompleted = w.status === "completed"
-                const range = formatDateRangeLocale(w.startDate, w.endDate, locale)
-
-                return (
-                  <div
-                    key={w.id}
-                    className={cn(
-                      "group relative flex items-center justify-between rounded-lg border p-2.5 transition cursor-pointer",
-                      isActive
-                        ? "border-primary bg-primary/8 shadow-xs"
-                        : "border-border bg-card hover:border-primary/40 hover:bg-accent/40"
-                    )}
-                    onClick={() => selectWeek(w.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && selectWeek(w.id)}
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={cn("text-xs font-semibold", isActive ? "text-primary" : "text-foreground")}>
-                          {w.title}
-                        </span>
-                        {isActive && (
-                          <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.2 text-[0.6rem] font-bold">
-                            {t.common.active}
-                          </span>
-                        )}
-                        {isCompleted && (
-                          <span className="rounded bg-primary/15 text-primary px-1.5 py-0.2 text-[0.6rem] font-medium">
-                            {t.common.completed} · {w.progresso.percentual}%
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[0.7rem] text-muted-foreground mt-0.5">{range}</p>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {weeks.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setWeekToDelete(w)
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive transition rounded"
-                          title="Excluir semana"
-                          aria-label={`Excluir ${w.title}`}
-                        >
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Table of Contents */}
-            <div className="mt-5 pt-4 border-t border-border">
-              <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                {t.nav.index}
-              </p>
-              <nav aria-label={t.nav.index} className="space-y-0.5 max-h-[38vh] overflow-y-auto pr-1">
-                {activeGuide.sections.map((s) => (
-                  <a
-                    key={s.id}
-                    href={`#${s.id}`}
-                    className={cn(
-                      "flex items-baseline gap-2 rounded-md px-2.5 py-1.5 text-xs transition",
-                      activeSection === s.id
-                        ? "bg-primary/10 font-medium text-primary"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                    )}
-                  >
-                    <span className="text-[0.68rem] tabular-nums text-gold-foreground shrink-0">{s.number}</span>
-                    <span className="truncate">{s.title}</span>
-                  </a>
-                ))}
-              </nav>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content Sections */}
-        <main className="min-w-0 flex-1 space-y-6 sm:space-y-8">
-          {/* Local Data Cloud Migration Banner */}
-          {showMigrationBanner && (
-            <MigrationBanner onDismiss={() => setShowMigrationBanner(false)} />
-          )}
-
-          {/* Week Review Card (when completed) */}
-          <WeekReviewCard />
-
-          {activeGuide.sections.map((s) => (
-            <SectionCard key={s.id} section={s} />
-          ))}
-
-          <footer className="pt-6 text-center border-t border-border/60">
-            <p className="text-xs text-muted-foreground">
-              {activeGuide.title} · {t.guide.answersSavedLocally}
-            </p>
-          </footer>
-        </main>
-      </div>
-
-      {/* Mobile Weeks Switcher Drawer */}
-      {weeksDrawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Semanas do Guia">
-          <div
-            className="absolute inset-0 bg-foreground/40 backdrop-blur-xs"
-            aria-hidden="true"
-            onClick={() => setWeeksDrawerOpen(false)}
-          />
-          <div
-            className="absolute right-0 top-0 h-full w-80 max-w-[88vw] overflow-y-auto border-l border-border bg-card shadow-2xl flex flex-col"
-            style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-          >
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-              <div className="mb-4 flex items-center justify-between pb-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <Calendar className="size-4 text-primary" aria-hidden="true" />
-                  <h3 className="font-serif text-base font-semibold text-foreground">{t.nav.weeks}</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setWeeksDrawerOpen(false)}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label={t.common.close}
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWeeksDrawerOpen(false)
-                    setCreateModalOpen(true)
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 px-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation min-h-[2.5rem]"
-                >
-                  <Plus className="size-4" aria-hidden="true" />
-                  <span>{t.nav.newWeek}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWeeksDrawerOpen(false)
-                    setMyGuidesModalOpen(true)
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-border bg-card py-2.5 px-3 text-xs sm:text-sm font-semibold text-foreground hover:bg-accent transition touch-manipulation min-h-[2.5rem]"
-                >
-                  <BookOpen className="size-4 text-primary" aria-hidden="true" />
-                  <span>{t.nav.myGuides}</span>
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {weeks.map((w) => {
-                  const isActive = w.id === activeWeek?.id
-                  const isCompleted = w.status === "completed"
-                  const range = formatDateRangeLocale(w.startDate, w.endDate, locale)
-
-                  return (
-                    <div
-                      key={w.id}
-                      className={cn(
-                        "flex items-center justify-between rounded-lg border p-3 transition touch-manipulation cursor-pointer",
-                        isActive
-                          ? "border-primary bg-primary/10 shadow-xs"
-                          : "border-border bg-card hover:bg-accent/50"
-                      )}
-                      onClick={() => {
-                        selectWeek(w.id)
-                        setWeeksDrawerOpen(false)
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") { selectWeek(w.id); setWeeksDrawerOpen(false) }
-                      }}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn("text-sm font-semibold", isActive ? "text-primary" : "text-foreground")}>
-                            {w.title}
-                          </span>
-                          {isActive && (
-                            <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[0.65rem] font-bold">
-                              {t.common.active}
-                            </span>
-                          )}
-                          {isCompleted && (
-                            <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[0.65rem] font-medium">
-                              {t.common.completed} · {w.progresso.percentual}%
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{range}</p>
-                      </div>
-
-                      {weeks.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setWeekToDelete(w)
-                          }}
-                          className="ml-2 p-2 min-w-[2.5rem] min-h-[2.5rem] flex items-center justify-center text-muted-foreground hover:text-destructive transition rounded-md"
-                          title="Excluir semana"
-                          aria-label={`Excluir ${w.title}`}
-                        >
-                          <Trash2 className="size-4" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div
-              className="px-4 py-4 border-t border-border bg-card"
-              style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setWeeksDrawerOpen(false)
-                  handleReset()
-                }}
-                className="w-full flex items-center justify-center gap-2 rounded-md border border-border py-3 text-sm font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 transition touch-manipulation"
-              >
-                <RotateCcw className="size-3.5" aria-hidden="true" />
-                <span>{t.hero.resetWeekAnswers}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Index TOC Drawer */}
-      {navOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t.nav.sections}>
-          <div
-            className="absolute inset-0 bg-foreground/40 backdrop-blur-xs"
-            aria-hidden="true"
-            onClick={() => setNavOpen(false)}
-          />
-          <nav
-            aria-label={t.nav.index}
-            className="absolute right-0 top-0 h-full w-72 max-w-[85vw] overflow-y-auto border-l border-border bg-card p-4 shadow-xl"
-            style={{ paddingBottom: "env(safe-area-inset-bottom, 1rem)" }}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t.nav.sections}</p>
-              <button
-                type="button"
-                onClick={() => setNavOpen(false)}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label={t.common.close}
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-            {/* Mobile TOC list */}
-            <div className="p-4 space-y-1 overflow-y-auto">
-              {activeGuide.sections.map((s) => (
-                <a
-                  key={s.id}
-                  href={`#${s.id}`}
-                  onClick={() => setNavOpen(false)}
-                  className={cn(
-                    "flex items-baseline gap-2.5 rounded-lg px-3 py-2 text-sm transition touch-manipulation",
-                    activeSection === s.id
-                      ? "bg-primary/10 font-semibold text-primary"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                  )}
-                >
-                  <span className="text-xs font-semibold tabular-nums text-gold-foreground">{s.number}</span>
-                  <span className="truncate">{s.title}</span>
-                </a>
-              ))}
-            </div>
-          </nav>
-        </div>
-      )}
-
-      {/* Modals */}
-      <CreateWeekModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-      />
-
-      <DeleteWeekModal
-        week={weekToDelete}
-        isOpen={Boolean(weekToDelete)}
-        onClose={() => setWeekToDelete(null)}
-      />
-
-      <CompleteWeekModal
-        isOpen={completeModalOpen}
-        onClose={() => setCompleteModalOpen(false)}
-      />
-
-      <SettingsModal
-        isOpen={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-        initialTab={settingsTab}
-      />
-      {/* My Guides Modal */}
-      <MyGuidesModal
-        isOpen={myGuidesModalOpen}
-        onClose={() => setMyGuidesModalOpen(false)}
-      />
+  return <div className="app-shell min-h-screen text-foreground">
+    {deletionResult && <div className="mx-auto max-w-3xl p-4"><AccountDeletionNotice /></div>}
+    <a href="#conteudo" className="skip-link">{copy("Pular para o conteúdo", "Skip to content")}</a>
+    <header className="app-header sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur-lg"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-8">
+      <a href="#topo" aria-label={copy("Anew, Início", "Anew, Home")} className="flex shrink-0 items-center gap-2 text-primary"><span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground"><BrandMark className="size-6" /></span><span className="font-serif text-xl font-semibold">Anew<span className="text-gold">.</span></span></a>
+      <nav aria-label={copy("Navegação Principal", "Main Navigation")} className="hidden items-center gap-1 sm:flex"><a href="#conteudo" className="nav-link"><CalendarDays className="size-4" aria-hidden="true" />{copy("Minha Semana", "My Week")}</a><button type="button" onClick={() => requireAccount(() => setMyGuidesOpen(true))} className="nav-link"><BookOpen className="size-4" aria-hidden="true" />{copy("Meus Guias", "My Guides")}</button></nav>
+      <div className="flex items-center gap-1"><SoundControl /><button type="button" onClick={() => setMoreOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-accent" aria-haspopup="dialog"><MoreHorizontal className="size-5" aria-hidden="true" /><span>{copy("Mais", "More")}</span></button>{!fullAccess && <button type="button" onClick={() => setAuthOpen(true)} className="min-h-11 rounded-xl border border-border px-3 text-xs font-medium text-primary">{copy("Entrar", "Sign In")}</button>}</div>
+    </div></header>
+    <div className="mx-auto max-w-6xl px-4 pb-10 sm:px-8">
+      {demo.enabled && <section aria-label="Interactive Demo Controls" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4"><div><p className="text-sm font-semibold text-primary">{copy("Demo Interativo · Exemplos", "Interactive Demo · Sample Records")}</p><p className="mt-1 text-xs text-muted-foreground">{copy("Use livremente. Os exemplos ficam nesta sessão; não usam sua conta ou IA.", "Explore freely. Samples stay in this session; they do not use your account or AI.")}</p></div><div className="flex gap-2"><button type="button" onClick={demo.resetDemo} className="min-h-11 rounded-xl border border-border bg-card px-3 text-xs">{copy("Reiniciar Demo", "Reset Demo")}</button><button type="button" onClick={demo.exitDemo} className="min-h-11 rounded-xl border border-border bg-card px-3 text-xs">{copy("Sair do Demo", "Exit Demo")}</button></div></section>}
+      {storageWarning && fullAccess && <div role="alert" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/25 bg-destructive/5 p-4"><p className="text-sm">{storageWarning}</p><button type="button" onClick={() => openSettings("exportacao")} className="min-h-11 rounded-xl border border-border px-3 text-xs text-primary">{copy("Recuperação e Backups", "Recovery and Backups")}</button></div>}
+      <section id="topo" aria-labelledby="welcome-title" className="scroll-mt-24 border-b border-border py-8 sm:py-10"><p className="eyebrow text-primary">{copy("SEU PLANEJADOR DE SETE DIAS", "YOUR SEVEN-DAY PLANNER")}</p><h1 id="welcome-title" className="mt-3 font-serif text-[clamp(2rem,4.8vw,3.7rem)] leading-tight tracking-tight">{titleCase(copy("Sete Dias.", "Seven Days."))} <span className="italic text-primary">{copy("Pequenos Passos.", "Small Steps.")}</span></h1><p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">{copy("Uma semana possível, com espaço para o que importa. Comece com pequenos passos prontos, adapte quando quiser e siga no seu ritmo.", "A manageable week, with room for what matters. Start with ready-made small steps, adapt whenever you wish and move at your own pace.")}</p><div className="mt-5 flex flex-wrap gap-3"><a href="#conteudo" className="primary-button">{copy(samplePreview ? "Ver Minha Semana" : "Continuar Minha Semana", samplePreview ? "See My Week" : "Continue My Week")}<ArrowRight className="size-4" aria-hidden="true" /></a><button type="button" onClick={() => requireAccount(() => setCreateGuideOpen(true))} className="min-h-11 rounded-xl border border-border px-4 text-sm font-medium text-primary hover:bg-accent">{copy("Escolher Outra Semana", "Choose Another Week")}</button></div>{!fullAccess && onPersonalize && <button type="button" onClick={onPersonalize} className="mt-3 min-h-11 rounded-xl px-2 text-xs text-muted-foreground underline underline-offset-4">{copy("Personalizar Minha Prévia · Opcional", "Personalize My Preview · Optional")}</button>}</section>
+      <main id="conteudo" tabIndex={-1} className="min-w-0 scroll-mt-24 space-y-6 pt-6 outline-none">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{fullAccess && !starterIsPreview && <button type="button" onClick={prevWeek} disabled={!hasPrevWeek} className="icon-button border border-border" aria-label={copy("Semana Anterior", "Previous Week")}><ChevronLeft className="size-4" aria-hidden="true" /></button>}<button type="button" onClick={() => fullAccess && !starterIsPreview ? setWeeksOpen(true) : undefined} disabled={samplePreview} className="min-w-0 rounded-xl px-2 py-1 text-left"><h2 className="font-serif text-xl sm:text-2xl">{titleCase(activeGuide.title)}</h2><span className="mt-1 block text-xs text-muted-foreground">{dateRange}</span></button>{fullAccess && !starterIsPreview && <button type="button" onClick={nextWeek} disabled={!hasNextWeek} className="icon-button border border-border" aria-label={copy("Próxima Semana", "Next Week")}><ChevronRight className="size-4" aria-hidden="true" /></button>}</div>{fullAccess && !starterIsPreview && <button type="button" onClick={() => requireAccount(() => setCreateWeekOpen(true))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-3 text-sm"><Plus className="size-4" aria-hidden="true" />{copy("Nova Semana", "New Week")}</button>}</div>
+        {samplePreview && <section aria-label={copy("Semana de Exemplo", "Sample Week")} className="flex flex-col justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:flex-row sm:items-center"><div><p className="text-sm font-semibold text-primary">{copy("Um Pequeno Começo · Prévia", "A Small Start · Preview")}</p><p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">{copy("Um passo pequeno por dia, com uma seção opcional de anotações. Nada será registrado até você escolher usar a semana.", "One small step each day, with an optional notes section. Nothing is recorded until you choose to use the week.")}</p></div><button type="button" onClick={useSample} className="primary-button shrink-0">{copy("Usar Esta Semana", "Use This Week")}</button></section>}
+        {!samplePreview && <div role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">{saveStatus === "saving" ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Check className="size-3.5 text-primary" aria-hidden="true" />}{demo.enabled ? copy("Exemplos salvos só nesta sessão", "Samples saved for this session only") : storageWarning ? copy("Verifique o armazenamento", "Check storage") : saveStatus === "saving" ? t.sync.saving : saveStatus === "error" ? <button type="button" onClick={retrySync} className="text-destructive underline">{t.sync.error} · {t.sync.retry}</button> : saveStatus === "offline" ? copy("Salvo neste dispositivo · offline", "Saved on this device · offline") : copy("Salvo neste dispositivo", "Saved on this device")}</div>}
+        <section aria-labelledby="seven-days-title" className="rounded-2xl border border-border bg-card p-4 sm:p-6"><div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><h3 id="seven-days-title" className="font-serif text-xl">{titleCase(copy("Seus Sete Dias", "Your Seven Days"))}</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{copy("Pode mudar, pular ou descansar. Os horários são sugestões.", "You can change, skip or rest. Times are suggestions.")}</p></div>{!readOnly && <button type="button" onClick={() => openSettings("programacao")} className="min-h-11 rounded-xl px-3 text-xs text-primary hover:bg-accent">{copy("Opções da Rotina", "Routine Options")}</button>}</div>
+          {!readOnly ? <InteractiveScheduleBlock /> : <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{days.map((day) => <li key={day.dayIndex} className="rounded-xl border border-border bg-background/30 p-4"><p className="text-xs font-semibold text-primary">{day.dayNumberLabel}</p><p className="mt-1 text-xs text-muted-foreground">{day.formattedShort}</p><ul className="mt-3 space-y-3">{activities.filter((activity) => activity.dayIndex === day.dayIndex).map((activity) => <li key={activity.id} className="text-sm leading-relaxed">{activity.description}</li>)}</ul>{!activities.some((activity) => activity.dayIndex === day.dayIndex) && <p className="mt-3 text-sm text-muted-foreground">{copy("Espaço para o que você escolher.", "Room for whatever you choose.")}</p>}</li>)}</ol>}
+        </section>
+        <section aria-labelledby="optional-notes-title" className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="optional-notes-title" className="font-serif text-xl">{titleCase(copy("Um Espaço Opcional para Você", "Optional Room for You"))}</h3><p className="mt-1 text-xs text-muted-foreground">{copy("Abra só o que ajudar. Os campos são opcionais.", "Open only what helps. Every field is optional.")}</p></div>{fullAccess && !readOnly && activeWeek?.status !== "completed" && <button type="button" onClick={() => setSectionsOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-3 text-xs text-primary"><Plus className="size-4" aria-hidden="true" />{copy("Personalizar Seções", "Customize Sections")}</button>}</div><fieldset disabled={readOnly} className="space-y-4" aria-label={copy("Seções Opcionais", "Optional Sections")}>{guideSections.map((section) => <SectionCard key={section.id} section={section} preview={readOnly} collapsed />)}</fieldset>{guideSections.length === 0 && <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">{copy("Seu guia usa só os dias por enquanto. Adicione seções quando quiser.", "Your guide uses just the days for now. Add sections whenever you wish.")}</p>}</section>
+        {fullAccess && !readOnly && <WeekReviewCard />}
+        {fullAccess && !readOnly && activeWeek?.status === "active" && <div className="flex flex-col justify-between gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center"><div><h3 className="font-serif text-xl">{titleCase(copy("Encerrar Quando Fizer Sentido", "Close Whenever It Makes Sense"))}</h3><p className="mt-1 text-sm text-muted-foreground">{copy("Não precisa completar todos os passos. Você pode reabrir depois.", "You do not need to complete every step. You can reopen later.")}</p></div><button type="button" onClick={() => setCompleteOpen(true)} className="primary-button shrink-0"><CheckCircle2 className="size-4" aria-hidden="true" />{copy("Encerrar Semana", "Close Week")}</button></div>}
+      </main>
+      <details id="additional-resources" open={resourcesOpen} onToggle={(event) => setResourcesOpen(event.currentTarget.open)} className="mt-10 scroll-mt-24 border-t border-border pt-5"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">{titleCase(copy("Recursos de Apoio · Opcional", "Support Resources · Optional"))}</summary><div className="mt-6"><ResourceLibrary /></div></details>
+      <details id="additional-privacy" open={privacyOpen} onToggle={(event) => setPrivacyOpen(event.currentTarget.open)} className="mt-5 scroll-mt-24 border-t border-border pt-5"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">{titleCase(copy("Privacidade e Suas Escolhas", "Privacy and Your Choices"))}</summary><div className="mt-6"><PrivacyPanel /></div></details>
+      <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border py-6"><a href="#topo" className="font-serif text-xl font-semibold text-primary">Anew.</a><p className="max-w-xl text-xs leading-relaxed text-muted-foreground">{copy("Um planejador pessoal de sete dias. Pequenos passos, no seu ritmo.", "A personal seven-day planner. Small steps, at your own pace.")}</p><button type="button" onClick={() => setTourOpen(true)} className="min-h-11 rounded-xl px-3 text-xs text-primary">{copy("Guia Rápido", "Quick Tour")}</button></footer>
     </div>
-  )
+    {moreOpen && <div ref={moreRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="more-title" className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-5"><div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => setMoreOpen(false)} aria-hidden="true" /><div className="relative max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-3xl border border-border bg-card p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 id="more-title" className="font-serif text-xl">{titleCase(copy("Mais Opções", "More Options"))}</h2><button type="button" onClick={() => setMoreOpen(false)} className="icon-button" aria-label={t.common.close}><X className="size-5" aria-hidden="true" /></button></div><div className="space-y-1"><button type="button" className="sidebar-action" onClick={() => setLocale(en ? "pt-BR" : "en-US")}>{en ? "Language: English → Português" : "Idioma: Português → English"}</button><button type="button" className="sidebar-action" onClick={() => { setMoreOpen(false); requireAccount(() => setMyGuidesOpen(true)) }}><BookOpen className="size-4" aria-hidden="true" />{copy("Meus Guias", "My Guides")}</button><button type="button" className="sidebar-action" onClick={() => { setMoreOpen(false); setTourOpen(true) }}><CircleHelp className="size-4" aria-hidden="true" />{copy("Rever Guia Rápido", "Replay Quick Tour")}</button><button type="button" className="sidebar-action" onClick={() => showExtra("resources")}><CircleHelp className="size-4" aria-hidden="true" />{copy("Recursos de Apoio", "Support Resources")}</button><button type="button" className="sidebar-action" onClick={() => showExtra("privacy")}><ShieldCheck className="size-4" aria-hidden="true" />{copy("Privacidade", "Privacy")}</button><button type="button" className="sidebar-action" onClick={() => { setMoreOpen(false); openSettings("aparencia") }}><Settings className="size-4" aria-hidden="true" />{copy("Configurações", "Settings")}</button>{fullAccess && <><button type="button" className="sidebar-action" onClick={() => { setMoreOpen(false); openSettings("exportacao") }}><Download className="size-4" aria-hidden="true" />{copy("Exportar e Fazer Backup", "Export and Back Up")}</button>{!readOnly && <button type="button" className="sidebar-action" onClick={() => { if (window.confirm(t.hero.resetWeekConfirm)) { resetActiveWeek(); setMoreOpen(false) } }}><RotateCcw className="size-4" aria-hidden="true" />{copy("Limpar Respostas da Semana", "Clear Week Answers")}</button>}<button type="button" className="sidebar-action" onClick={leave}>{demo.enabled ? copy("Sair do Demo", "Exit Demo") : copy("Sair da Conta", "Sign Out")}</button></>}{!demo.enabled && demo.available && <button type="button" className="sidebar-action" onClick={() => { setMoreOpen(false); startDemo() }}>{copy("Experimentar Demo Interativo", "Try Interactive Demo")}</button>}</div></div></div>}
+    {weeksOpen && <div ref={weeksRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="weeks-title" className="fixed inset-0 z-50 flex justify-end"><div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => setWeeksOpen(false)} aria-hidden="true" /><div className="relative h-dvh w-full max-w-sm overflow-y-auto border-l border-border bg-card p-5"><div className="mb-5 flex items-center justify-between"><h2 id="weeks-title" className="font-serif text-xl">{titleCase(copy("Minhas Semanas", "My Weeks"))}</h2><button type="button" onClick={() => setWeeksOpen(false)} className="icon-button" aria-label={t.common.close}><X className="size-5" aria-hidden="true" /></button></div>{weekList}</div></div>}
+    <AuthDialog isOpen={authOpen} onClose={() => setAuthOpen(false)} onGuest={() => { setPreviewRequested(true); setAuthOpen(false) }} onDemo={demo.available ? startDemo : undefined} />
+    <CreateWeekModal isOpen={fullAccess && createWeekOpen} onClose={() => setCreateWeekOpen(false)} />
+    <CreateGuideModal isOpen={fullAccess && createGuideOpen} onClose={() => setCreateGuideOpen(false)} />
+    <EditGuideSectionsModal isOpen={fullAccess && sectionsOpen} onClose={() => setSectionsOpen(false)} />
+    <DeleteWeekModal week={weekToDelete} isOpen={fullAccess && Boolean(weekToDelete)} onClose={() => setWeekToDelete(null)} />
+    <CompleteWeekModal isOpen={fullAccess && completeOpen} onClose={() => setCompleteOpen(false)} />
+    <SettingsModal isOpen={fullAccess && settingsOpen} onClose={() => setSettingsOpen(false)} initialTab={settingsTab} />
+    <MyGuidesModal isOpen={fullAccess && myGuidesOpen} onClose={() => setMyGuidesOpen(false)} />
+    <PlannerTutorial isOpen={tourOpen} onClose={closeTour} en={en} />
+  </div>
 }

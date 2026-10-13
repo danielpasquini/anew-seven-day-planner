@@ -9,16 +9,31 @@ import {
   useRef,
   useState,
 } from "react"
-import { DEFAULT_GUIDE_TEMPLATE, GUIDE_TEMPLATES, type GuideTemplate, type CompletionConfig, sections } from "@/lib/guide-data"
+import { DEFAULT_GUIDE_TEMPLATE, DEFAULT_GUIDE_TEMPLATE_EN, GUIDE_TEMPLATES, type GuideTemplate, type CompletionConfig, type Section, sections } from "@/lib/guide-data"
 import { calculateInclusiveEndDate, getNextDayDate, getTodayFormatted, getWeekDays, formatDateRangeLocale, type Locale } from "@/lib/date-utils"
 import { getDictionary, type TranslationDictionary } from "@/lib/i18n"
 import { BibleProvider, type BibleVersion } from "@/lib/bible/bible-provider"
 import { SyncEngine, type SyncStatus } from "@/lib/sync/sync-engine"
+import { isValidActivity, isValidBackup, isValidDate, isValidGuide } from "@/lib/backup-validation"
+import { createStarterGuide, reviseGuideSections } from "@/lib/planner"
+import { useAuth } from "@/lib/auth/client"
+import { getAuthToken } from "@/lib/auth/firebase-client"
+import { apiUrl } from "@/lib/api-url"
+import { saveTextFile } from "@/lib/platform"
+import { onboardingDraftKey, readOnboardingGuide } from "@/lib/onboarding-draft"
+import { useDemo } from "@/lib/demo"
 
 const STORAGE_KEY_V2 = "guia-retomada-v2"
-const STORAGE_KEY_V1 = "guia-retomada-v1"
 const STORAGE_KEY_LOCALE = "guia-locale"
 const STORAGE_KEY_BIBLE_VERSION = "guia-bible-version"
+
+// Built-in templates can be revised without changing user answers or historical snapshots.
+function upgradeBuiltInGuides(loaded: GuideTemplate[]): GuideTemplate[] {
+  return loaded.map((guide) => {
+    const builtIn = GUIDE_TEMPLATES.find((template) => template.id === guide.id)
+    return builtIn && !guide.customized && guide.version < builtIn.version ? builtIn : guide
+  })
+}
 
 export type ThemeMode = "light" | "dark" | "system"
 export type ColorPalette = "sage" | "terracotta" | "blue" | "graphite" | "olive"
@@ -137,22 +152,7 @@ export type AIReview = {
 }
 
 export function getDefaultScheduleActivities(): ScheduleActivity[] {
-  return [
-    { id: "act-0-1", dayIndex: 0, time: "16:30", description: "Preparar caderno + duas escadas / Ativação 15 min", order: 0, countsTowardCompletion: true },
-    { id: "act-0-2", dayIndex: 0, time: "17:00", description: "Saída: degrau 1", order: 1, countsTowardCompletion: true },
-    { id: "act-0-3", dayIndex: 0, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
-    { id: "act-1-1", dayIndex: 1, time: "16:30", description: "Trabalho: pista externa nível 1", order: 0, countsTowardCompletion: true },
-    { id: "act-1-2", dayIndex: 1, time: "17:00", description: "Repetir saída", order: 1, countsTowardCompletion: true },
-    { id: "act-2-1", dayIndex: 2, time: "16:30", description: "Julgamento proporcional", order: 0, countsTowardCompletion: true },
-    { id: "act-2-2", dayIndex: 2, time: "21:30", description: "Escrita livre 5 min", order: 1, countsTowardCompletion: true },
-    { id: "act-3-1", dayIndex: 3, time: "16:30", description: "Relacionamento: 4 colunas", order: 0, countsTowardCompletion: true },
-    { id: "act-3-2", dayIndex: 3, time: "17:00", description: "Saída: mesmo/pequeno avanço", order: 1, countsTowardCompletion: true },
-    { id: "act-4-1", dayIndex: 4, time: "16:30", description: "Discriminação de ameaça", order: 0, countsTowardCompletion: true },
-    { id: "act-5-1", dayIndex: 5, time: "16:30", description: "Vínculo + competência", order: 0, countsTowardCompletion: true },
-    { id: "act-5-2", dayIndex: 5, time: "17:00", description: "Saída", order: 1, countsTowardCompletion: true },
-    { id: "act-5-3", dayIndex: 5, time: "21:30", description: "Escrita livre 5 min", order: 2, countsTowardCompletion: true },
-    { id: "act-6-1", dayIndex: 6, time: "16:30", description: "Revisão semanal 30 min", order: 0, countsTowardCompletion: true },
-  ]
+  return DEFAULT_GUIDE_TEMPLATE_EN.weeklyPlan.map((activity) => ({ ...activity }))
 }
 
 export function generateWeekId(): string {
@@ -167,6 +167,7 @@ export type GuideTemplateSnapshot = {
   theologyEnabled?: boolean
   contentLocale?: "pt-BR" | "en-US"
   bibleVersion?: "ARA" | "NVT" | "KJV" | "NIV" | null
+  sections?: Section[]
 }
 
 export type WeekInstance = {
@@ -210,6 +211,9 @@ type StoreValue = {
   selectGuide: (id: string) => void
   addGuide: (guide: GuideTemplate) => void
   saveAndActivateGuide: (guide: GuideTemplate) => void
+  updateGuideSections: (sections: Section[]) => boolean
+  starterIsPreview: boolean
+  useStarterWeek: () => void
   weeks: WeekInstance[]
   activeWeek: WeekInstance | null
   activeWeekId: string | null
@@ -219,7 +223,8 @@ type StoreValue = {
   updateWeekMeta: (id: string, updates: { title?: string; startDate?: string }) => void
   completeWeek: (id: string) => Promise<void>
   reopenWeek: (id: string) => void
-  generateAIReview: (id: string) => Promise<void>
+  generateAIReview: (id: string, aiConsent?: boolean, includeTextAnswers?: boolean) => Promise<void>
+  clearAllLocalData: () => void
   isGeneratingAI: boolean
   aiError: string | null
   prevWeek: () => void
@@ -249,6 +254,8 @@ type StoreValue = {
   setBibleVersion: (version: BibleVersion) => void
   t: TranslationDictionary
   saveStatus: SyncStatus
+  storageWarning: string | null
+  storageReadOnly: boolean
   retrySync: () => void
   exportToMarkdown: () => void
   exportWeekJSON: () => void
@@ -258,49 +265,139 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null)
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [guides, setGuides] = useState<GuideTemplate[]>(GUIDE_TEMPLATES)
-  const [activeGuideId, setActiveGuideId] = useState<string>(DEFAULT_GUIDE_TEMPLATE.id)
-  const [weeks, setWeeks] = useState<WeekInstance[]>([])
+export function StoreProvider({ children, initialGuide }: { children: React.ReactNode; initialGuide?: GuideTemplate | null }) {
+  const initialGuideRef = useRef(initialGuide)
+  const demoContext = useDemo()
+  // The owner and storage backend never change inside a mounted workspace.
+  // LaunchExperience remounts this provider for every demo start/reset/exit.
+  const demo = useRef(demoContext).current
+  const demoMode = demo.enabled && demo.demoStorage !== null && demo.storageKey !== null
+  const { status: authStatus, user: authUser, legalAccepted } = useAuth()
+  const user = demoMode ? null : authUser
+  const fullAccess = demoMode || (authStatus === "authenticated" && user?.emailVerified === true && legalAccepted)
+  const storageKey = demoMode ? demo.storageKey! : user && fullAccess ? `${STORAGE_KEY_V2}:${user.uid}` : "guia-preview"
+  const storage = useRef<Pick<Storage, "getItem" | "setItem" | "removeItem">>(demoMode ? demo.demoStorage! : {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+    removeItem: (key) => localStorage.removeItem(key),
+  }).current
+  const [guides, setGuidesState] = useState<GuideTemplate[]>(GUIDE_TEMPLATES)
+  const guidesRef = useRef(guides)
+  guidesRef.current = guides
+  const setGuides = useCallback((next: GuideTemplate[]) => { guidesRef.current = next; setGuidesState(next) }, [])
+  const workspaceActiveRef = useRef(true)
+  const [activeGuideId, setActiveGuideId] = useState<string>(DEFAULT_GUIDE_TEMPLATE_EN.id)
+  const [weeks, setWeeksState] = useState<WeekInstance[]>([])
+  const weeksRef = useRef(weeks)
+  weeksRef.current = weeks
+  // Resolve a workspace action once, before passing a value to React. Some actions
+  // allocate IDs and select a week; React may replay its own updater functions.
+  const setWeeks = useCallback((next: WeekInstance[] | ((current: WeekInstance[]) => WeekInstance[])) => {
+    const resolved = typeof next === "function" ? next(weeksRef.current) : next
+    weeksRef.current = resolved
+    setWeeksState(resolved)
+  }, [])
   const [activeWeekId, setActiveWeekId] = useState<string | null>(null)
   const [theme, setThemeState] = useState<ThemeMode>("light")
   const [palette, setPaletteState] = useState<ColorPalette>("sage")
-  const [locale, setLocaleState] = useState<Locale>("pt-BR")
-  const [bibleVersion, setBibleVersionState] = useState<BibleVersion>("ARA")
+  const [locale, setLocaleState] = useState<Locale>("en-US")
+  const [bibleVersion, setBibleVersionState] = useState<BibleVersion>("KJV")
   const [ready, setReady] = useState(false)
+  const [starterIsPreview, setStarterIsPreview] = useState(false)
+  const starterPreviewRef = useRef(false)
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<SyncStatus>("idle")
-  const syncEngineRef = useRef<SyncEngine>(new SyncEngine())
+  const [storageIssue, setStorageIssue] = useState<"invalid" | "unread" | "unavailable" | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const preservedBackupRef = useRef<string | null>(null)
+  const storageBlockedRef = useRef(false)
+  const deletionSuspendedRef = useRef(false)
+  const [deletionSuspended, setDeletionSuspended] = useState(false)
+  const storageReadOnly = storageIssue === "invalid" || storageIssue === "unread"
+  const canEdit = fullAccess && !storageReadOnly && !deletionSuspended
+  const storageWarning = storageIssue === "invalid"
+    ? locale === "en-US"
+      ? "The saved backup could not be read. Its original contents were preserved, and editing is paused. Download the original backup, then import a valid backup or delete this account's local data to start again."
+      : "O backup salvo não pôde ser lido. O conteúdo original foi preservado e a edição está pausada. Baixe o backup original e importe um backup válido, ou apague os dados locais desta conta para recomeçar."
+    : storageIssue === "unread"
+      ? locale === "en-US"
+        ? "Your saved records could not be read. Editing is paused to preserve them. Retry reading, restore a valid backup, or explicitly clear this account's local data."
+        : "Não foi possível ler seus registros salvos. A edição está pausada para preservá-los. Tente ler novamente, restaure um backup válido ou apague explicitamente os dados locais desta conta."
+    : storageIssue === "unavailable"
+      ? locale === "en-US"
+        ? "Browser storage is unavailable or full. Changes remain in memory until they can be saved. Download a backup before closing this page."
+        : "O armazenamento do navegador está indisponível ou cheio. As alterações ficam na memória até poderem ser salvas. Baixe um backup antes de fechar esta página."
+      : null
+  const syncEngineRef = useRef<SyncEngine | null>(null)
+  if (!syncEngineRef.current) syncEngineRef.current = new SyncEngine()
+  const syncEngine = syncEngineRef.current
 
   useEffect(() => {
-    const unsubscribe = syncEngineRef.current.subscribe((status) => {
+    workspaceActiveRef.current = true
+    const unsubscribe = syncEngine.subscribe((status) => {
       setSaveStatus(status)
+      if (status === "error" && !storageBlockedRef.current) setStorageIssue("unavailable")
     })
-    return () => unsubscribe()
-  }, [])
+    const flush = () => syncEngine.flushLocalPersist()
+    const beforeSignOut = (event: Event) => {
+      if (demoMode || !user || (event as CustomEvent<string>).detail !== user.uid) return
+      if (!syncEngine.flushLocalPersist()) event.preventDefault()
+    }
+    const beforeDelete = (event: Event) => {
+      if (demoMode || !user) return
+      if ((event as CustomEvent<string>).detail !== user?.uid) return
+      // A failed remote deletion must leave the most recent edits recoverable.
+      if (!syncEngine.flushLocalPersist()) { event.preventDefault(); return }
+      deletionSuspendedRef.current = true
+      setDeletionSuspended(true)
+      syncEngine.dispose()
+    }
+    const deletionFailed = (event: Event) => {
+      if (demoMode || !user) return
+      if ((event as CustomEvent<string>).detail !== user?.uid) return
+      deletionSuspendedRef.current = false
+      setDeletionSuspended(false)
+    }
+    window.addEventListener("pagehide", flush)
+    window.addEventListener("retomada:pause", flush)
+    window.addEventListener("retomada:account-deleting", beforeDelete)
+    window.addEventListener("retomada:before-sign-out", beforeSignOut)
+    window.addEventListener("retomada:account-deletion-failed", deletionFailed)
+    return () => {
+      flush()
+      workspaceActiveRef.current = false
+      unsubscribe()
+      window.removeEventListener("pagehide", flush)
+      window.removeEventListener("retomada:pause", flush)
+      window.removeEventListener("retomada:account-deleting", beforeDelete)
+      window.removeEventListener("retomada:before-sign-out", beforeSignOut)
+      window.removeEventListener("retomada:account-deletion-failed", deletionFailed)
+      syncEngine.dispose()
+    }
+  }, [syncEngine, user?.uid, demoMode])
 
   // Load theme, palette, locale and bibleVersion on client side
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem("guia-theme") as ThemeMode | null
+      const savedTheme = storage.getItem("guia-theme") as ThemeMode | null
       if (savedTheme && ["light", "dark", "system"].includes(savedTheme)) {
         setThemeState(savedTheme)
       }
-      const savedPalette = localStorage.getItem("guia-palette") as ColorPalette | null
+      const savedPalette = storage.getItem("guia-palette") as ColorPalette | null
       if (savedPalette && ["sage", "terracotta", "blue", "graphite", "olive"].includes(savedPalette)) {
         setPaletteState(savedPalette)
       }
-      const savedLocale = localStorage.getItem(STORAGE_KEY_LOCALE) as Locale | null
+      const savedLocale = storage.getItem(STORAGE_KEY_LOCALE) as Locale | null
       if (savedLocale && ["pt-BR", "en-US"].includes(savedLocale)) {
         setLocaleState(savedLocale)
       }
-      const savedBible = localStorage.getItem(STORAGE_KEY_BIBLE_VERSION) as BibleVersion | null
-      if (savedBible && ["ARA", "NVT", "KJV", "NIV"].includes(savedBible)) {
-        setBibleVersionState(savedBible)
-      }
+      const resolvedLocale = savedLocale === "pt-BR" ? "pt-BR" : "en-US"
+      const savedBible = storage.getItem(STORAGE_KEY_BIBLE_VERSION) as BibleVersion | null
+      const compatible = resolvedLocale === "en-US" ? ["KJV", "NIV"] : ["ARA", "NVT"]
+      setBibleVersionState(savedBible && compatible.includes(savedBible) ? savedBible : resolvedLocale === "en-US" ? "KJV" : "ARA")
     } catch {}
-  }, [])
+  }, [storage])
 
   // Apply theme class to <html>
   useEffect(() => {
@@ -336,48 +433,54 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setTheme = useCallback((nextTheme: ThemeMode) => {
     setThemeState(nextTheme)
     try {
-      localStorage.setItem("guia-theme", nextTheme)
+      storage.setItem("guia-theme", nextTheme)
     } catch {}
-  }, [])
+  }, [storage])
 
   const setPalette = useCallback((nextPalette: ColorPalette) => {
     setPaletteState(nextPalette)
     try {
-      localStorage.setItem("guia-palette", nextPalette)
+      storage.setItem("guia-palette", nextPalette)
     } catch {}
-  }, [])
+  }, [storage])
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale)
     try {
-      localStorage.setItem(STORAGE_KEY_LOCALE, nextLocale)
+      storage.setItem(STORAGE_KEY_LOCALE, nextLocale)
     } catch {}
     // Automatically set matching default bible version if current is incompatible with new locale
     if (nextLocale === "en-US" && !["KJV", "NIV"].includes(bibleVersion)) {
       setBibleVersionState("KJV")
       try {
-        localStorage.setItem(STORAGE_KEY_BIBLE_VERSION, "KJV")
+        storage.setItem(STORAGE_KEY_BIBLE_VERSION, "KJV")
       } catch {}
     } else if (nextLocale === "pt-BR" && !["ARA", "NVT"].includes(bibleVersion)) {
       setBibleVersionState("ARA")
       try {
-        localStorage.setItem(STORAGE_KEY_BIBLE_VERSION, "ARA")
+        storage.setItem(STORAGE_KEY_BIBLE_VERSION, "ARA")
       } catch {}
     }
-  }, [bibleVersion])
+  }, [bibleVersion, storage])
 
   const setBibleVersion = useCallback((nextVersion: BibleVersion) => {
+    if (!(locale === "en-US" ? ["KJV", "NIV"] : ["ARA", "NVT"]).includes(nextVersion)) return
     setBibleVersionState(nextVersion)
     try {
-      localStorage.setItem(STORAGE_KEY_BIBLE_VERSION, nextVersion)
+      storage.setItem(STORAGE_KEY_BIBLE_VERSION, nextVersion)
     } catch {}
-  }, [])
+  }, [locale, storage])
 
   const t = useMemo<TranslationDictionary>(() => getDictionary(locale), [locale])
 
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   const persist = useCallback(
     (nextWeeks: WeekInstance[], nextActiveId: string | null, nextGuides = guides, nextGuideId = activeGuideId) => {
-      syncEngineRef.current.scheduleSync(
+      if (!workspaceActiveRef.current || !fullAccess || starterPreviewRef.current || storageBlockedRef.current || deletionSuspendedRef.current) return
+      syncEngine.scheduleSync(
         {
           schemaVersion: 4,
           locale,
@@ -394,20 +497,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           },
         },
         (fullPayload) => {
-          try {
-            localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(fullPayload))
-          } catch {
-            // ignore quota error
-          }
+          storage.setItem(storageKey, JSON.stringify(fullPayload))
+          setStorageIssue(null)
         }
       )
     },
-    [guides, activeGuideId, locale, bibleVersion, theme, palette]
+    [guides, activeGuideId, locale, bibleVersion, theme, palette, fullAccess, storageKey, storage, syncEngine]
   )
 
   const retrySync = useCallback(() => {
-    syncEngineRef.current.flushPendingSync()
-  }, [])
+    if (storageIssue === "unread") { setLoadAttempt((attempt) => attempt + 1); return }
+    void syncEngine.flushPendingSync()
+  }, [storageIssue, syncEngine])
 
   const computeProgress = useCallback((data: WeekData, activities?: ScheduleActivity[]): WeekProgress => {
     const acts = (activities ?? []).filter((a) => a.countsTowardCompletion !== false)
@@ -443,25 +544,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Initialize and load from localStorage with migration to schema v4
+  // Initialize the selected account or memory-only demo adapter with migration to schema v4.
   useEffect(() => {
+    let mayPersistInitial = fullAccess
+    let startingGuide = createStarterGuide()
+    let startingGuides = [startingGuide, ...GUIDE_TEMPLATES]
+    let isStarter = true
     try {
-      const rawV2 = localStorage.getItem(STORAGE_KEY_V2)
-      if (rawV2) {
-        const parsed = JSON.parse(rawV2) as any
+      const rawV2 = fullAccess ? storage.getItem(storageKey) : null
+      if (rawV2 === null) {
+        storageBlockedRef.current = false
+        preservedBackupRef.current = null
+        setStorageIssue(null)
+      }
+      if (rawV2 !== null) {
+        preservedBackupRef.current = rawV2
+        const parsed = JSON.parse(rawV2)
+        if (!isValidBackup(parsed)) throw new Error("INVALID_LOCAL_BACKUP")
         const loadedGuides: GuideTemplate[] = Array.isArray(parsed.guides) && parsed.guides.length > 0
-          ? parsed.guides
+          ? upgradeBuiltInGuides(parsed.guides)
           : GUIDE_TEMPLATES
         setGuides(loadedGuides)
+        isStarter = false
+        starterPreviewRef.current = false
+        setStarterIsPreview(false)
 
         const loadedGuideId = parsed.activeGuideId || DEFAULT_GUIDE_TEMPLATE.id
         setActiveGuideId(loadedGuideId)
+        startingGuides = loadedGuides
+        startingGuide = loadedGuides.find((guide) => guide.id === loadedGuideId) || loadedGuides[0] || DEFAULT_GUIDE_TEMPLATE_EN
 
         if (parsed.weeks && parsed.weeks.length > 0) {
           const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => {
             const data = w.data ?? { text: {}, done: {} }
             const rawActs =
-              w.programacao?.activities && w.programacao.activities.length > 0
+              Array.isArray(w.programacao?.activities)
                 ? w.programacao.activities
                 : getDefaultScheduleActivities()
 
@@ -482,13 +599,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               contentLocale: guideTpl.contentLocale,
               bibleVersion: guideTpl.bibleVersion,
             }
+            const snapshotWithSections = { ...guideSnapshot, sections: guideSnapshot.sections || guideTpl.sections }
 
             return {
               ...w,
               guideId,
               templateId: guideId,
               guideVersion,
-              guideSnapshot,
+              guideSnapshot: snapshotWithSections,
               updatedAt: w.updatedAt || w.createdAt || new Date().toISOString(),
               status: w.status || "active",
               completedAt: w.completedAt || null,
@@ -507,44 +625,52 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
           )
           setWeeks(sorted)
-          const validActive = sorted.some((w) => w.id === parsed.activeWeekId)
+          const validActive = typeof parsed.activeWeekId === "string" && sorted.some((w) => w.id === parsed.activeWeekId)
             ? parsed.activeWeekId
             : sorted[0].id
           setActiveWeekId(validActive)
+          setActiveGuideId(sorted.find((w) => w.id === validActive)?.guideId ?? loadedGuideId)
+          preservedBackupRef.current = null
+          storageBlockedRef.current = false
+          setStorageIssue(null)
           setReady(true)
           return
         }
-      }
-
-      // Migration from v1 or initial creation
-      let legacyData: WeekData = { text: {}, done: {} }
-      try {
-        const rawV1 = localStorage.getItem(STORAGE_KEY_V1)
-        if (rawV1) {
-          const parsedV1 = JSON.parse(rawV1)
-          if (parsedV1.text || parsedV1.done) {
-            legacyData = { text: parsedV1.text ?? {}, done: parsedV1.done ?? {} }
-          }
+      } else if (fullAccess && user) {
+        const personalGuide = initialGuideRef.current || readOnboardingGuide(storage, user.uid)
+        if (personalGuide) {
+          isStarter = personalGuide.id.startsWith("anew-starter-")
+          startingGuide = personalGuide
+          startingGuides = [personalGuide, ...GUIDE_TEMPLATES]
         }
-      } catch {
-        // ignore
       }
+    } catch {
+      mayPersistInitial = false
+      storageBlockedRef.current = true
+      setStorageIssue(preservedBackupRef.current !== null ? "invalid" : "unread")
+    }
 
+      // A safe blank workspace never adopts unassigned legacy browser notes.
+      const legacyData: WeekData = { text: {}, done: {} }
       const today = getTodayFormatted()
       const nowIso = new Date().toISOString()
-      const defaultActs = getDefaultScheduleActivities()
+      const defaultActs = startingGuide.weeklyPlan.map((activity) => ({ ...activity }))
       const initialWeek: WeekInstance = {
         id: "week-1",
-        guideId: DEFAULT_GUIDE_TEMPLATE.id,
-        templateId: DEFAULT_GUIDE_TEMPLATE.id,
-        guideVersion: DEFAULT_GUIDE_TEMPLATE.version,
+        guideId: startingGuide.id,
+        templateId: startingGuide.id,
+        guideVersion: startingGuide.version,
         guideSnapshot: {
-          id: DEFAULT_GUIDE_TEMPLATE.id,
-          title: DEFAULT_GUIDE_TEMPLATE.title,
-          version: DEFAULT_GUIDE_TEMPLATE.version,
-          completionConfig: DEFAULT_GUIDE_TEMPLATE.completionConfig,
+          id: startingGuide.id,
+          title: startingGuide.title,
+          version: startingGuide.version,
+          completionConfig: startingGuide.completionConfig,
+          theologyEnabled: startingGuide.theologyEnabled,
+          contentLocale: startingGuide.contentLocale,
+          bibleVersion: startingGuide.bibleVersion,
+          sections: startingGuide.sections,
         },
-        title: "Semana 1",
+        title: "Week 1",
         startDate: today,
         endDate: calculateInclusiveEndDate(today),
         createdAt: nowIso,
@@ -563,25 +689,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         progresso: computeProgress(legacyData, defaultActs),
       }
 
-      setGuides(GUIDE_TEMPLATES)
-      setActiveGuideId(DEFAULT_GUIDE_TEMPLATE.id)
+      setGuides(startingGuides)
+      starterPreviewRef.current = isStarter
+      setStarterIsPreview(isStarter)
+      setActiveGuideId(startingGuide.id)
       setWeeks([initialWeek])
       setActiveWeekId("week-1")
-      localStorage.setItem(
-        STORAGE_KEY_V2,
-        JSON.stringify({
+      if (mayPersistInitial && !isStarter) {
+        let initialSaved = false
+        try { storage.setItem(storageKey, JSON.stringify({
           schemaVersion: 4,
-          guides: GUIDE_TEMPLATES,
-          activeGuideId: DEFAULT_GUIDE_TEMPLATE.id,
+          guides: startingGuides,
+          activeGuideId: startingGuide.id,
           weeks: [initialWeek],
           activeWeekId: "week-1",
-        })
-      )
-    } catch {
-      // fallback
-    }
+        })); initialSaved = true; setStorageIssue(null) } catch {
+          // Retain the initial account write in the same recoverable queue as later edits.
+          syncEngine.scheduleSync({ schemaVersion: 4, guides: startingGuides, activeGuideId: startingGuide.id,
+            weeks: [initialWeek], activeWeekId: "week-1", locale, bibleVersion,
+            settings: { theme, palette, locale, bibleVersion } }, (payload) => {
+              storage.setItem(storageKey, JSON.stringify(payload))
+              setStorageIssue(null)
+              if (user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch { /* Saved workspace is authoritative. */ } }
+            })
+          syncEngine.flushLocalPersist()
+        }
+        if (initialSaved && user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch { /* The saved workspace remains authoritative. */ } }
+      }
     setReady(true)
-  }, [computeProgress])
+  }, [computeProgress, fullAccess, storageKey, storage, loadAttempt])
 
   // Sorted weeks chronologically
   const sortedWeeks = useMemo(() => {
@@ -591,26 +727,45 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [weeks])
 
   const activeGuide = useMemo(() => {
-    return guides.find((g) => g.id === activeGuideId) || guides[0] || DEFAULT_GUIDE_TEMPLATE
-  }, [guides, activeGuideId])
+    const guide = guides.find((g) => g.id === activeGuideId) || guides[0] || DEFAULT_GUIDE_TEMPLATE_EN
+    const week = weeks.find((w) => w.id === activeWeekId && w.guideId === guide.id)
+      ?? weeks.find((w) => w.guideId === guide.id)
+    return week?.guideSnapshot?.sections ? { ...guide, sections: week.guideSnapshot.sections } : guide
+  }, [guides, activeGuideId, weeks, activeWeekId])
+
+  const useStarterWeek = useCallback(() => {
+    if (!canEdit || !starterPreviewRef.current) return
+    starterPreviewRef.current = false
+    setStarterIsPreview(false)
+    persist(weeks, activeWeekId, guides, activeGuideId)
+  }, [canEdit, persist, weeks, activeWeekId, guides, activeGuideId])
 
   const selectGuide = useCallback((guideId: string) => {
+    if (starterPreviewRef.current) return
+    if (!guides.some((g) => g.id === guideId)) return
+    const nextWeekId = [...weeks].reverse().find((w) => w.guideId === guideId)?.id ?? null
     setActiveGuideId(guideId)
-    persist(weeks, activeWeekId, guides, guideId)
+    setActiveWeekId(nextWeekId)
+    persist(weeks, nextWeekId, guides, guideId)
   }, [weeks, activeWeekId, guides, persist])
 
   const addGuide = useCallback((newGuide: GuideTemplate) => {
-    setGuides((prev) => {
-      const updated = [...prev.filter((g) => g.id !== newGuide.id), newGuide]
-      setActiveGuideId(newGuide.id)
-      persist(weeks, activeWeekId, updated, newGuide.id)
-      return updated
-    })
-  }, [weeks, activeWeekId, persist])
+    if (!workspaceActiveRef.current || storageBlockedRef.current || deletionSuspendedRef.current || !isValidGuide(newGuide)) return
+    const updated = [...guidesRef.current.filter((g) => g.id !== newGuide.id), newGuide]
+    starterPreviewRef.current = false
+    setStarterIsPreview(false)
+    setGuides(updated)
+    setActiveGuideId(newGuide.id)
+    setActiveWeekId(null)
+    persist(weeksRef.current, null, updated, newGuide.id)
+  }, [guides, weeks, persist])
 
   const saveAndActivateGuide = useCallback((newGuide: GuideTemplate) => {
-    setGuides((prev) => {
-      const updatedGuides = [...prev.filter((g) => g.id !== newGuide.id), newGuide]
+      if (!workspaceActiveRef.current || storageBlockedRef.current || deletionSuspendedRef.current || !isValidGuide(newGuide)) return
+      const wasPreview = starterPreviewRef.current
+      starterPreviewRef.current = false
+      setStarterIsPreview(false)
+      const updatedGuides = [...guidesRef.current.filter((g) => g.id !== newGuide.id && (!wasPreview || g.id !== activeGuideId)), newGuide]
       setActiveGuideId(newGuide.id)
 
       const today = getTodayFormatted()
@@ -633,6 +788,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           theologyEnabled: newGuide.theologyEnabled,
           contentLocale: newGuide.contentLocale,
           bibleVersion: newGuide.bibleVersion,
+          sections: newGuide.sections,
         },
         title: newGuide.contentLocale === "en-US" ? "Week 1" : "Semana 1",
         startDate: today,
@@ -653,39 +809,63 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         progresso: computeProgress(initialData, acts),
       }
 
-      setWeeks((prevWeeks) => {
-        const nextWeeks = [...prevWeeks, newWeek]
-        setActiveWeekId(newWeekId)
-        persist(nextWeeks, newWeekId, updatedGuides, newGuide.id)
-        return nextWeeks
-      })
+      const nextWeeks = [...(wasPreview ? [] : weeksRef.current), newWeek]
+      setGuides(updatedGuides)
+      setWeeks(nextWeeks)
+      setActiveWeekId(newWeekId)
+      persist(nextWeeks, newWeekId, updatedGuides, newGuide.id)
+  }, [guides, weeks, activeGuideId, computeProgress, persist])
 
-      return updatedGuides
-    })
-  }, [computeProgress, persist])
+  const updateGuideSections = useCallback((nextSections: Section[]) => {
+    if (!canEdit) return false
+    if (weeks.find((week) => week.id === activeWeekId)?.status === "completed") return false
+    const source = guides.find((guide) => guide.id === activeGuideId)
+    if (!source) return false
+    const revised = reviseGuideSections(source, nextSections)
+    if (!revised) return false
+    const nextGuides = guides.map((guide) => guide.id === source.id ? revised : guide)
+    const now = new Date().toISOString()
+    const nextWeeks = weeks.map((week) => week.id === activeWeekId && week.status === "active" ? {
+      ...week, guideVersion: revised.version, updatedAt: now,
+        guideSnapshot: { ...week.guideSnapshot, id: revised.id, title: revised.title, version: revised.version,
+        completionConfig: revised.completionConfig, theologyEnabled: revised.theologyEnabled,
+        contentLocale: revised.contentLocale, bibleVersion: revised.bibleVersion, sections: revised.sections },
+    } : week)
+    starterPreviewRef.current = false
+    setStarterIsPreview(false)
+    setGuides(nextGuides)
+    setWeeks(nextWeeks)
+    persist(nextWeeks, activeWeekId, nextGuides, activeGuideId)
+    return true
+  }, [canEdit, guides, activeGuideId, weeks, activeWeekId, persist])
 
+  const guideWeeks = useMemo(() => sortedWeeks.filter((w) => w.guideId === activeGuideId), [sortedWeeks, activeGuideId])
   const activeWeek = useMemo(() => {
-    if (!activeWeekId) return sortedWeeks[0] ?? null
-    return sortedWeeks.find((w) => w.id === activeWeekId) ?? sortedWeeks[0] ?? null
-  }, [sortedWeeks, activeWeekId])
+    return guideWeeks.find((w) => w.id === activeWeekId) ?? guideWeeks[0] ?? null
+  }, [guideWeeks, activeWeekId])
 
   const selectWeek = useCallback(
     (id: string) => {
+      const target = weeks.find((w) => w.id === id)
+      if (!target) return
       setActiveWeekId(id)
+      setActiveGuideId(target.guideId)
       setWeeks((prev) => {
-        persist(prev, id)
+        persist(prev, id, guides, target.guideId)
         return prev
       })
     },
-    [persist]
+    [persist, weeks, guides]
   )
 
   const createWeek = useCallback(
-    (customTitle?: string, customStartDate?: string, templateId = DEFAULT_GUIDE_TEMPLATE.id) => {
+    (customTitle?: string, customStartDate?: string, templateId = activeGuideId) => {
       let startDate = customStartDate?.trim() || ""
+      if (startDate && !isValidDate(startDate)) return
+      if (customTitle !== undefined && customTitle.trim().length > 500) return
 
       setWeeks((prevWeeks) => {
-        const sorted = [...prevWeeks].sort((a, b) =>
+        const sorted = prevWeeks.filter((w) => w.guideId === templateId).sort((a, b) =>
           a.startDate.localeCompare(b.startDate) || a.createdAt.localeCompare(b.createdAt)
         )
 
@@ -699,8 +879,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
 
         const endDate = calculateInclusiveEndDate(startDate)
+        if (!isValidDate(startDate) || !isValidDate(endDate)) return prevWeeks
         const weekNumber = sorted.length + 1
-        const title = customTitle?.trim() || `Semana ${weekNumber}`
+        const title = customTitle?.trim() || `${locale === "en-US" ? "Week" : "Semana"} ${weekNumber}`
         const newId = generateWeekId()
         const nowIso = new Date().toISOString()
         const initialData = { text: {}, done: {} }
@@ -720,6 +901,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             theologyEnabled: targetGuide.theologyEnabled,
             contentLocale: targetGuide.contentLocale,
             bibleVersion: targetGuide.bibleVersion,
+            sections: targetGuide.sections,
           },
           title,
           startDate,
@@ -745,11 +927,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         )
 
         setActiveWeekId(newId)
-        persist(updatedWeeks, newId)
+        setActiveGuideId(targetGuide.id)
+        persist(updatedWeeks, newId, guides, targetGuide.id)
         return updatedWeeks
       })
     },
-    [guides, activeGuide, computeProgress, persist]
+    [guides, activeGuide, activeGuideId, locale, computeProgress, persist]
   )
 
   const deleteWeek = useCallback(
@@ -760,22 +943,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const today = getTodayFormatted()
           const nowIso = new Date().toISOString()
           const emptyData = { text: {}, done: {} }
-          const defaultActs = getDefaultScheduleActivities()
+          const defaultActs = activeGuide.weeklyPlan.map((activity) => ({ ...activity }))
           const defaultWeek: WeekInstance = {
             id: generateWeekId(),
-            guideId: DEFAULT_GUIDE_TEMPLATE.id,
-            templateId: DEFAULT_GUIDE_TEMPLATE.id,
-            guideVersion: DEFAULT_GUIDE_TEMPLATE.version,
+            guideId: activeGuide.id,
+            templateId: activeGuide.id,
+            guideVersion: activeGuide.version,
             guideSnapshot: {
-              id: DEFAULT_GUIDE_TEMPLATE.id,
-              title: DEFAULT_GUIDE_TEMPLATE.title,
-              version: DEFAULT_GUIDE_TEMPLATE.version,
-              completionConfig: DEFAULT_GUIDE_TEMPLATE.completionConfig,
-              theologyEnabled: DEFAULT_GUIDE_TEMPLATE.theologyEnabled,
-              contentLocale: DEFAULT_GUIDE_TEMPLATE.contentLocale,
-              bibleVersion: DEFAULT_GUIDE_TEMPLATE.bibleVersion,
+              id: activeGuide.id,
+              title: activeGuide.title,
+              version: activeGuide.version,
+              completionConfig: activeGuide.completionConfig,
+              theologyEnabled: activeGuide.theologyEnabled,
+              contentLocale: activeGuide.contentLocale,
+              bibleVersion: activeGuide.bibleVersion,
+              sections: activeGuide.sections,
             },
-            title: "Semana 1",
+            title: locale === "en-US" ? "Week 1" : "Semana 1",
             startDate: today,
             endDate: calculateInclusiveEndDate(today),
             createdAt: nowIso,
@@ -803,7 +987,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         )
 
         setActiveWeekId((currentActive) => {
-          const nextActiveId = currentActive === id ? sortedRemaining[0].id : currentActive
+          const nextActiveId = currentActive === id ? sortedRemaining.find((w) => w.guideId === activeGuideId)?.id ?? null : currentActive
           persist(sortedRemaining, nextActiveId)
           return nextActiveId
         })
@@ -811,11 +995,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return sortedRemaining
       })
     },
-    [computeProgress, persist]
+    [computeProgress, persist, activeGuide, activeGuideId, locale]
   )
 
   const updateWeekMeta = useCallback(
     (id: string, updates: { title?: string; startDate?: string }) => {
+      if (updates.startDate && !isValidDate(updates.startDate)) return
+      if (updates.startDate && !isValidDate(calculateInclusiveEndDate(updates.startDate))) return
+      if (updates.title !== undefined && updates.title.length > 500) return
       setWeeks((prev) => {
         const nowIso = new Date().toISOString()
         const next = prev.map((w) => {
@@ -843,9 +1030,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // AI Review Generator Function (calls server-side API)
   const generateAIReview = useCallback(
-    async (weekId: string) => {
+    async (weekId: string, aiConsent = false, includeTextAnswers = false) => {
+      if (demoMode) {
+        setAiError("AI is unavailable in demo mode. No information is sent to a provider.")
+        return
+      }
+      if (!fullAccess) return
+      if (!aiConsent) {
+        setAiError(locale === "en-US" ? "Your permission is required before sending data to Google Gemini." : "Seu consentimento é necessário antes de enviar dados ao Google Gemini.")
+        return
+      }
+      if (isGeneratingAI) return
       const targetWeek = weeks.find((w) => w.id === weekId)
-      if (!targetWeek || !targetWeek.completionSnapshot) return
+      if (!targetWeek || targetWeek.status !== "completed") return
+      const requestSnapshot = createSnapshot(targetWeek)
+      const requestUpdatedAt = targetWeek.updatedAt
 
       setIsGeneratingAI(true)
       setAiError(null)
@@ -853,22 +1052,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const snap = targetWeek.guideSnapshot
       const guideSnapshotConfig = snap?.completionConfig || activeGuide.completionConfig
       // Use snapshot values for theology/locale isolation (invariants #8, #9, #17)
-      const weekTheologyEnabled = snap?.theologyEnabled ?? activeGuide.theologyEnabled
+      const weekTheologyEnabled = snap?.theologyEnabled === true && activeGuide.theologyEnabled === true
       const weekContentLocale = snap?.contentLocale || activeGuide.contentLocale || locale
 
       try {
-        const res = await fetch("/api/analyze-week", {
+        const reviewUrl = apiUrl("/api/analyze-week")
+        if (!reviewUrl) throw new Error("The AI service is not available in this app yet. You can continue using your local guide.")
+        const authToken = await getAuthToken()
+        const res = await fetch(reviewUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
+            aiConsent: true,
             guideTitle: snap?.title || activeGuide.title,
             weekTitle: targetWeek.title,
             startDate: targetWeek.startDate,
             endDate: targetWeek.endDate,
-            snapshot: targetWeek.completionSnapshot,
-            textAnswers: targetWeek.data.text,
+            snapshot: requestSnapshot,
+            textAnswers: includeTextAnswers ? targetWeek.data.text : {},
             theologyEnabled: weekTheologyEnabled,
             completionConfig: guideSnapshotConfig,
             contentLocale: weekContentLocale,
@@ -877,7 +1081,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         if (!res.ok) {
           const errJson = await res.json().catch(() => ({}))
-          throw new Error(errJson.error || "Falha na comunicação com o servidor para análise inteligência.")
+          throw new Error(errJson.error || "The AI service could not complete this review.")
         }
 
         const reviewData: AIReview = await res.json()
@@ -891,33 +1095,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               updatedAt: nowIso,
               aiReview: reviewData,
               aiReviewVersion: (w.aiReviewVersion || 1) + 1,
-              aiReviewOutdated: false,
+              aiReviewOutdated: w.updatedAt !== requestUpdatedAt,
             }
           })
           persist(next, activeWeekId)
           return next
         })
       } catch (err: any) {
-        console.error("AI Review Generation Error:", err)
-        setAiError(err?.message || "Análise indisponível no momento.")
+        setAiError(err?.message || "The review is unavailable right now.")
       } finally {
         setIsGeneratingAI(false)
       }
     },
-    [weeks, activeWeekId, persist]
+    [weeks, activeWeekId, activeGuide, locale, isGeneratingAI, fullAccess, demoMode, persist, createSnapshot]
   )
 
   // Complete Week Handler
   const completeWeek = useCallback(
     async (id: string) => {
-      let snapshotToUse: CompletionSnapshot | null = null
-
       setWeeks((prev) => {
         const nowIso = new Date().toISOString()
         const next = prev.map((w) => {
           if (w.id !== id) return w
           const snapshot = createSnapshot(w)
-          snapshotToUse = snapshot
           return {
             ...w,
             status: "completed" as WeekStatus,
@@ -931,12 +1131,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return next
       })
 
-      // Trigger AI review asynchronously; failure does not affect completion status
-      if (snapshotToUse) {
-        await generateAIReview(id)
-      }
     },
-    [createSnapshot, generateAIReview, activeWeekId, persist]
+    [createSnapshot, activeWeekId, persist]
   )
 
   // Reopen Completed Week
@@ -961,25 +1157,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const activeIndex = useMemo(() => {
     if (!activeWeek) return -1
-    return sortedWeeks.findIndex((w) => w.id === activeWeek.id)
-  }, [sortedWeeks, activeWeek])
+    return guideWeeks.findIndex((w) => w.id === activeWeek.id)
+  }, [guideWeeks, activeWeek])
 
   const hasPrevWeek = activeIndex > 0
-  const hasNextWeek = activeIndex >= 0 && activeIndex < sortedWeeks.length - 1
+  const hasNextWeek = activeIndex >= 0 && activeIndex < guideWeeks.length - 1
 
   const prevWeek = useCallback(() => {
     if (hasPrevWeek) {
-      const prevId = sortedWeeks[activeIndex - 1].id
+      const prevId = guideWeeks[activeIndex - 1].id
       selectWeek(prevId)
     }
-  }, [hasPrevWeek, sortedWeeks, activeIndex, selectWeek])
+  }, [hasPrevWeek, guideWeeks, activeIndex, selectWeek])
 
   const nextWeek = useCallback(() => {
     if (hasNextWeek) {
-      const nextId = sortedWeeks[activeIndex + 1].id
+      const nextId = guideWeeks[activeIndex + 1].id
       selectWeek(nextId)
     }
-  }, [hasNextWeek, sortedWeeks, activeIndex, selectWeek])
+  }, [hasNextWeek, guideWeeks, activeIndex, selectWeek])
 
   const getText = useCallback(
     (fieldId: string) => {
@@ -992,6 +1188,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setText = useCallback(
     (fieldId: string, value: string) => {
       if (!activeWeek) return
+      if (value.length > 100000) return
       const currentWeekId = activeWeek.id
       setWeeks((prevWeeks) => {
         const nowIso = new Date().toISOString()
@@ -1062,6 +1259,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const addScheduleActivity = useCallback(
     (dayIndex: number, time: string, description: string, countsTowardCompletion = true) => {
       if (!activeWeek) return
+      if (!description.trim() || !isValidActivity({ id: "new-activity", dayIndex, time: time.trim() || "12:00", description: description.trim(), order: 0, countsTowardCompletion })) return
       const currentWeekId = activeWeek.id
       setWeeks((prevWeeks) => {
         const nowIso = new Date().toISOString()
@@ -1107,6 +1305,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updates: { dayIndex?: number; time?: string; description?: string; order?: number; countsTowardCompletion?: boolean }
     ) => {
       if (!activeWeek) return
+      const current = activeWeek.programacao.activities.find((activity) => activity.id === id)
+      if (!current || !isValidActivity({ ...current, ...updates }) || updates.description !== undefined && !updates.description.trim()) return
       const currentWeekId = activeWeek.id
       setWeeks((prevWeeks) => {
         const nowIso = new Date().toISOString()
@@ -1121,6 +1321,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               ...(updates.time !== undefined && { time: updates.time }),
               ...(updates.description !== undefined && { description: updates.description }),
               ...(updates.order !== undefined && { order: updates.order }),
+              ...(updates.dayIndex !== undefined && updates.dayIndex !== act.dayIndex && updates.order === undefined && {
+                order: Math.max(-1, ...currentActivities.filter((other) => other.dayIndex === updates.dayIndex && other.id !== id).map((other) => other.order)) + 1,
+              }),
               ...(updates.countsTowardCompletion !== undefined && { countsTowardCompletion: updates.countsTowardCompletion }),
             }
           })
@@ -1184,13 +1387,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const nowIso = new Date().toISOString()
         const nextWeeks = prevWeeks.map((w) => {
           if (w.id !== currentWeekId) return w
-          const currentActivities = [...(w.programacao?.activities || [])]
+          const currentActivities = (w.programacao?.activities || []).map((activity) => ({ ...activity }))
           const targetAct = currentActivities.find((a) => a.id === id)
           if (!targetAct) return w
 
           const dayActivities = currentActivities
             .filter((a) => a.dayIndex === targetAct.dayIndex)
-            .sort((a, b) => a.order - b.order)
+            .sort((a, b) => a.order - b.order || a.time.localeCompare(b.time))
 
           const currentIndex = dayActivities.findIndex((a) => a.id === id)
           if (currentIndex === -1) return w
@@ -1198,10 +1401,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1
           if (targetIndex < 0 || targetIndex >= dayActivities.length) return w
 
-          const otherAct = dayActivities[targetIndex]
-          const tempOrder = targetAct.order
-          targetAct.order = otherAct.order
-          otherAct.order = tempOrder
+          // Normalize imported equal ranks so every move produces a visible new order.
+          dayActivities.splice(currentIndex, 1)
+          dayActivities.splice(targetIndex, 0, targetAct)
+          dayActivities.forEach((activity, index) => { activity.order = index })
 
           const updatedProgramacao = {
             ...w.programacao,
@@ -1240,16 +1443,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return {
           ...w,
           data: { text: {}, done: {} },
+          progresso: computeProgress({ text: {}, done: {} }, w.programacao.activities),
+          updatedAt: new Date().toISOString(),
           aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
         }
       })
       persist(nextWeeks, currentWeekId)
       return nextWeeks
     })
-  }, [activeWeek, persist])
+  }, [activeWeek, computeProgress, persist])
 
-  const exportToMarkdown = useCallback(() => {
+  const exportToMarkdown = useCallback(async () => {
     if (!activeWeek) return
+    setAiError(null)
     const guideTitle = activeWeek.guideSnapshot?.title || activeGuide.title
     const rangeStr = formatDateRangeLocale(activeWeek.startDate, activeWeek.endDate, locale)
     const isEn = locale === "en-US"
@@ -1265,8 +1471,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     if (activeWeek.aiReview) {
       md += `---\n\n`
-      md += `### ${isEn ? "Clinical AI Review & Week Verdict" : "Análise Inteligente & Veredito da Semana"}\n\n`
-      md += `**${isEn ? "Verdict" : "Veredito"}:** ${activeWeek.aiReview.verdict}\n\n`
+      md += `### ${isEn ? "Optional AI reflection" : "Reflexão opcional com IA"}\n\n`
+      md += `**${isEn ? "Reflection" : "Reflexão"}:** ${activeWeek.aiReview.verdict}\n\n`
       md += `**${isEn ? "Summary" : "Resumo"}:** ${activeWeek.aiReview.summary}\n\n`
       md += `**${isEn ? "What worked well" : "O que funcionou bem"}:\n`
       activeWeek.aiReview.whatWorked.forEach((item) => (md += `- ${item}\n`))
@@ -1304,7 +1510,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     md += `---\n\n`
     md += `### ${isEn ? "Guide Records & Responses" : "Registros e Respostas do Guia"}\n\n`
-    sections.forEach((s) => {
+    activeGuide.sections.forEach((s) => {
       md += `#### ${isEn ? "Section" : "Seção"} ${s.number}: ${s.title}\n\n`
       s.blocks.forEach((block) => {
         if (block.type === "fields" && block.fields) {
@@ -1334,17 +1540,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${guideTitle.replace(/\s+/g, "_")}_${activeWeek.title.replace(/\s+/g, "_")}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      await saveTextFile(`${guideTitle.replace(/\s+/g, "_")}_${activeWeek.title.replace(/\s+/g, "_")}.md`, md, "text/markdown")
+    } catch {
+      setAiError(isEn ? "The file could not be saved or shared. Try again, and keep your guide open until you have a backup." : "Não foi possível salvar ou compartilhar o arquivo. Tente novamente e mantenha o guia aberto até ter um backup.")
+    }
   }, [activeWeek, activeGuide, locale, bibleVersion])
 
-  const exportWeekJSON = useCallback(() => {
+  const exportWeekJSON = useCallback(async () => {
     if (!activeWeek) return
+    setAiError(null)
     const activities = activeWeek.programacao?.activities || []
     const taskResults = activities.map((a) => ({
       id: a.id,
@@ -1388,16 +1593,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       aiReview: activeWeek.aiReview ?? null,
     }
     const jsonStr = JSON.stringify(exportData, null, 2)
-    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `Semana_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [activeWeek, activeGuide])
+    try {
+      await saveTextFile(`Retomada_Week_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`, jsonStr)
+    } catch {
+      setAiError(locale === "en-US" ? "The file could not be saved or shared. Try again, and keep your guide open until you have a backup." : "Não foi possível salvar ou compartilhar o arquivo. Tente novamente e mantenha o guia aberto até ter um backup.")
+    }
+  }, [activeWeek, activeGuide, locale])
 
-  const exportToJSON = useCallback(() => {
+  const exportToJSON = useCallback(async () => {
+    setAiError(null)
     const exportData = {
       schemaVersion: 4,
       locale,
@@ -1410,33 +1614,42 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       activeWeekId,
       weeks,
     }
-    const jsonStr = JSON.stringify(exportData, null, 2)
-    const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `Guia_Retomada_Backup_${new Date().toISOString().split("T")[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [weeks, activeWeekId, theme, palette, activeGuideId, guides, locale, bibleVersion])
+    // Download the unmodified original while an invalid saved backup is protected.
+    try {
+      const jsonStr = storageBlockedRef.current
+        ? preservedBackupRef.current ?? storage.getItem(storageKey)
+        : JSON.stringify(exportData, null, 2)
+      if (jsonStr === null) throw new Error("NO_READABLE_BACKUP")
+      await saveTextFile(`Retomada_Backup_${new Date().toISOString().split("T")[0]}.json`, jsonStr)
+    } catch {
+      setAiError(locale === "en-US" ? "The backup could not be saved or shared. Try again, and keep this window open until the backup is saved." : "Não foi possível salvar ou compartilhar o backup. Tente novamente e mantenha esta janela aberta até salvar o arquivo.")
+    }
+  }, [weeks, activeWeekId, theme, palette, activeGuideId, guides, locale, bibleVersion, storage, storageKey])
 
   const importFromJSON = useCallback(
     (jsonData: string) => {
       try {
+        if (jsonData.length > 10 * 1024 * 1024) return false
         const parsed = JSON.parse(jsonData)
-        if (!parsed || !Array.isArray(parsed.weeks) || parsed.weeks.length === 0) {
+        if (!isValidBackup(parsed)) {
           return false
         }
 
         const loadedGuides: GuideTemplate[] = Array.isArray(parsed.guides) && parsed.guides.length > 0
-          ? parsed.guides
+          ? upgradeBuiltInGuides(parsed.guides)
           : GUIDE_TEMPLATES
-        setGuides(loadedGuides)
-
         const loadedGuideId = parsed.activeGuideId || DEFAULT_GUIDE_TEMPLATE.id
-        setActiveGuideId(loadedGuideId)
 
-        const formattedWeeks: WeekInstance[] = parsed.weeks.map((w: any) => {
+        const importedGuide = loadedGuides.find((guide) => guide.id === loadedGuideId) || loadedGuides[0] || DEFAULT_GUIDE_TEMPLATE_EN
+        const importDate = getTodayFormatted()
+        // A valid empty backup becomes one blank week before any state is changed.
+        const sourceWeeks = parsed.weeks.length > 0 ? parsed.weeks : [{
+          id: generateWeekId(), guideId: importedGuide.id, templateId: importedGuide.id,
+          title: "Week 1", startDate: importDate, endDate: calculateInclusiveEndDate(importDate),
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          data: { text: {}, done: {} }, programacao: { dias: 7, activities: importedGuide.weeklyPlan },
+        }]
+        const formattedWeeks: WeekInstance[] = sourceWeeks.map((w: any) => {
           const guideId = w.guideId || w.templateId || DEFAULT_GUIDE_TEMPLATE.id
           const guideTpl = loadedGuides.find((g) => g.id === guideId) || DEFAULT_GUIDE_TEMPLATE
           const guideVersion = w.guideVersion || guideTpl.version || 1
@@ -1455,7 +1668,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             guideId,
             templateId: guideId,
             guideVersion,
-            guideSnapshot,
+            guideSnapshot: { ...guideSnapshot, sections: guideSnapshot.sections || guideTpl.sections },
             status: w.status || "active",
             completedAt: w.completedAt || null,
             completionSnapshot: w.completionSnapshot || null,
@@ -1469,9 +1682,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 countsTowardCompletion: a.countsTowardCompletion !== false,
               })),
             },
+            progresso: computeProgress(w.data, w.programacao?.activities || getDefaultScheduleActivities()),
           }
         })
 
+        // Complete validation and normalization before changing any state or allowing writes.
+        storageBlockedRef.current = false
+        starterPreviewRef.current = false
+        setStarterIsPreview(false)
+        preservedBackupRef.current = null
+        setStorageIssue(null)
+        setGuides(loadedGuides)
         setWeeks(formattedWeeks)
         if (parsed.activeWeekId && formattedWeeks.some((w) => w.id === parsed.activeWeekId)) {
           setActiveWeekId(parsed.activeWeekId)
@@ -1487,17 +1708,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.locale && ["pt-BR", "en-US"].includes(parsed.locale)) {
           setLocale(parsed.locale)
         }
-        if (parsed.bibleVersion && ["ARA", "NVT", "KJV", "NIV"].includes(parsed.bibleVersion)) {
-          setBibleVersion(parsed.bibleVersion)
-        }
-        persist(formattedWeeks, parsed.activeWeekId || formattedWeeks[0].id, loadedGuides, loadedGuideId)
+        const importedLocale = parsed.locale === "pt-BR" || parsed.locale === "en-US" ? parsed.locale : locale
+        const bibleChoices = importedLocale === "en-US" ? ["KJV", "NIV"] : ["ARA", "NVT"]
+        const importedBible = parsed.bibleVersion && bibleChoices.includes(parsed.bibleVersion)
+          ? parsed.bibleVersion : importedLocale === "en-US" ? "KJV" : "ARA"
+        setBibleVersionState(importedBible)
+        try { storage.setItem(STORAGE_KEY_BIBLE_VERSION, importedBible) } catch {}
+        const importedWeekId = parsed.activeWeekId && formattedWeeks.some((w) => w.id === parsed.activeWeekId) ? parsed.activeWeekId : formattedWeeks[0].id
+        const importedGuideId = formattedWeeks.find((w) => w.id === importedWeekId)?.guideId || loadedGuideId
+        setActiveGuideId(importedGuideId)
+        persist(formattedWeeks, importedWeekId, loadedGuides, importedGuideId)
         return true
       } catch {
         return false
       }
     },
-    [persist, setTheme, setPalette, setLocale, setBibleVersion]
+    [persist, computeProgress, setTheme, setPalette, setLocale, locale, storage]
   )
+
+  const clearAllLocalData = useCallback(() => {
+    if (demoMode) { syncEngine.dispose(); demo.resetDemo(); return }
+    if (!fullAccess) return
+    syncEngine.dispose()
+    // Only this account's notes and shared appearance preferences; other accounts stay intact.
+    const ownedKeys = [storageKey, "guia-theme", "guia-palette", "guia-locale", "guia-bible-version", "anew-gentle-sound", `guia-novo-draft:${user?.uid}`, `guia-resource-favorites:${user?.uid}`, `anew-planner-tour:${user?.uid}:v1`]
+    if (user) ownedKeys.push(onboardingDraftKey(user.uid))
+    for (const key of ownedKeys) storage.removeItem(key)
+    window.location.reload()
+  }, [syncEngine, fullAccess, storageKey, storage, user?.uid, demoMode, demo])
 
   const value = useMemo<StoreValue>(
     () => ({
@@ -1506,18 +1744,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       activeGuide,
       activeGuideId,
       selectGuide,
-      addGuide,
-      saveAndActivateGuide,
+      addGuide: canEdit ? addGuide : () => {},
+      saveAndActivateGuide: canEdit ? saveAndActivateGuide : () => {},
+      updateGuideSections,
+      starterIsPreview,
+      useStarterWeek,
       weeks: sortedWeeks,
       activeWeek,
       activeWeekId: activeWeek?.id ?? null,
       selectWeek,
-      createWeek,
-      deleteWeek,
-      updateWeekMeta,
-      completeWeek,
-      reopenWeek,
-      generateAIReview,
+      createWeek: canEdit ? (...args) => { useStarterWeek(); createWeek(...args) } : () => {},
+      deleteWeek: canEdit ? (...args) => { useStarterWeek(); deleteWeek(...args) } : () => {},
+      updateWeekMeta: canEdit ? (...args) => { useStarterWeek(); updateWeekMeta(...args) } : () => {},
+      completeWeek: canEdit ? (...args) => { useStarterWeek(); return completeWeek(...args) } : async () => {},
+      reopenWeek: canEdit ? (...args) => { useStarterWeek(); reopenWeek(...args) } : () => {},
+      generateAIReview: canEdit ? generateAIReview : async () => {},
       isGeneratingAI,
       aiError,
       prevWeek,
@@ -1525,15 +1766,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       hasPrevWeek,
       hasNextWeek,
       getText,
-      setText,
+      setText: canEdit ? (...args) => { useStarterWeek(); setText(...args) } : () => {},
       isDone,
-      toggleDone,
+      toggleDone: canEdit ? (...args) => { useStarterWeek(); toggleDone(...args) } : () => {},
       doneCount,
-      resetActiveWeek,
-      addScheduleActivity,
-      updateScheduleActivity,
-      deleteScheduleActivity,
-      moveScheduleActivity,
+      resetActiveWeek: canEdit ? () => { useStarterWeek(); resetActiveWeek() } : () => {},
+      addScheduleActivity: canEdit ? (...args) => { useStarterWeek(); addScheduleActivity(...args) } : () => {},
+      updateScheduleActivity: canEdit ? (...args) => { useStarterWeek(); updateScheduleActivity(...args) } : () => {},
+      deleteScheduleActivity: canEdit ? (...args) => { useStarterWeek(); deleteScheduleActivity(...args) } : () => {},
+      moveScheduleActivity: canEdit ? (...args) => { useStarterWeek(); moveScheduleActivity(...args) } : () => {},
       theme,
       setTheme,
       palette,
@@ -1544,11 +1785,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setBibleVersion,
       t,
       saveStatus,
+      storageWarning,
+      storageReadOnly,
       retrySync,
       exportToMarkdown,
       exportWeekJSON,
       exportToJSON,
-      importFromJSON,
+      importFromJSON: fullAccess ? importFromJSON : () => false,
+      clearAllLocalData,
     }),
     [
       ready,
@@ -1558,6 +1802,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       selectGuide,
       addGuide,
       saveAndActivateGuide,
+      updateGuideSections,
+      starterIsPreview,
+      useStarterWeek,
       sortedWeeks,
       activeWeek,
       selectWeek,
@@ -1598,6 +1845,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       exportWeekJSON,
       exportToJSON,
       importFromJSON,
+      clearAllLocalData,
+      fullAccess,
+      canEdit,
+      storageWarning,
+      storageReadOnly,
     ]
   )
 

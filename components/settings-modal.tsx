@@ -1,5 +1,7 @@
 "use client"
 
+import { titleCase } from "@/lib/title-case"
+
 import { useState, useRef, useEffect } from "react"
 import {
   Calendar,
@@ -22,7 +24,6 @@ import {
   ArrowUp,
   ArrowDown,
   AlertTriangle,
-  Sparkles,
 } from "lucide-react"
 import {
   useStore,
@@ -30,12 +31,62 @@ import {
   type WeekInstance,
 } from "@/lib/store"
 import {
-  formatDateRangeBR,
   formatDateRangeLocale,
   getTodayFormatted,
   getWeekDays,
 } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
+import { useModalAccessibility } from "@/components/modal-accessibility"
+import { isValidBackup } from "@/lib/backup-validation"
+import { isNativeApp } from "@/lib/platform"
+
+const SETTINGS_TEXT: Record<string, string> = {
+  "Arquivo corrompido ou não é um JSON válido.": "The file is corrupted or is not valid JSON.",
+  "Backup restaurado com sucesso!": "Backup restored successfully.",
+  "Falha ao restaurar backup. Arquivo inválido ou corrompido.": "The backup could not be restored. The file is invalid or corrupted.",
+  "Abas de configuração": "Settings sections",
+  "Semana Selecionada": "Selected week",
+  "Adicione, altere os horários ou remova compromissos para cada dia da semana ativa.": "Add, adjust or remove activities for each day of your selected week.",
+  "Horário": "Time",
+  "Descrição da Tarefa": "Activity description",
+  "Adicionar": "Add",
+  "Nenhuma atividade cadastrada para este dia. Adicione uma atividade acima!": "No activities for this day yet. You can add one above or leave room for rest.",
+  "Tradução clássica de referência": "Traditional Portuguese translation",
+  "Linguagem contemporânea e clara": "Contemporary Portuguese translation",
+  "Ativa": "Active",
+  "Fundo (Background)": "Background",
+  "Superfície (Card)": "Surface",
+  "Cor Primária": "Primary color",
+  "Destaque / Títulos": "Accent color",
+  "Confirmar restauração de backup?": "Restore this backup?",
+  "Isso": "This will",
+  "substituirá todos os dados atuais": "replace all current data",
+  "pelo conteúdo do arquivo.": "with the file contents.",
+  "no arquivo:": "in this file:",
+  "...e mais": "...and",
+  "Exportado em:": "Exported on:",
+  "Restaurar agora": "Restore backup",
+  "semana": "week",
+  "semanas": "weeks",
+  "Rotina de atividades": "Activity routine",
+  "Adicionar atividade": "Add activity",
+  "Atividades deste dia": "Activities for this day",
+  "Original (Pinho Sálvia)": "Sage & paper",
+  "Pinho & Papel Quente": "Sage & warm paper",
+  "Visual original do aplicativo. Equilíbrio, serenidade e papel aquecido.": "Soft greens and warm paper for a calm reading space.",
+  "Terracota Editorial": "Terracotta",
+  "Argila & Barro Quente": "Clay & warm earth",
+  "Cores quentes e orgânicas com tom de barro e aterramento.": "Warm, earthy colors with a soft clay accent.",
+  "Sábia Editorial": "Ocean blue",
+  "Azul Marinho & Índigo": "Navy & indigo",
+  "Serenidade oceânica, clareza mental e estrutura sóbria.": "Quiet blues and clean, readable surfaces.",
+  "Grafite Elefante": "Graphite",
+  "Carvão Monocromático": "Charcoal & neutral paper",
+  "Minimalismo contemporâneo e sóbrio em escala neutra.": "A simple, neutral palette with charcoal accents.",
+  "Oliva Editorial": "Olive",
+  "Verde Oliva & Amêndoa": "Olive & almond",
+  "Tons botânicos de oliva e terra com leiturabilidade acolhedora.": "Botanical greens and soft earth tones."
+}
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -44,6 +95,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: SettingsModalProps) {
+  const dialogRef = useModalAccessibility(isOpen, onClose)
   const {
     weeks,
     activeWeek,
@@ -68,7 +120,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     updateScheduleActivity,
     deleteScheduleActivity,
     moveScheduleActivity,
+    storageReadOnly,
+    aiError,
   } = useStore()
+
+  const copy = (pt: string) => locale === "en-US" ? SETTINGS_TEXT[pt] || pt : pt
 
   const [activeTab, setActiveTab] = useState<"semanas" | "programacao" | "aparencia" | "exportacao">(initialTab)
 
@@ -107,7 +163,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   // Create week handler
   const handleCreateWeek = (e: React.FormEvent) => {
     e.preventDefault()
-    const autoTitle = `Semana ${weeks.length + 1}`
+    const autoTitle = `${t.week.weekNumberLabel} ${weeks.length + 1}`
     createWeek(newWeekTitle.trim() || autoTitle, newWeekStartDate || getTodayFormatted())
     setNewWeekTitle("")
     setNewWeekStartDate(getTodayFormatted())
@@ -150,28 +206,34 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setImportStatus({ type: "error", msg: locale === "en-US" ? "The backup must be 10 MiB or smaller." : "O backup deve ter no máximo 10 MiB." })
+      e.target.value = ""
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = (event) => {
       const content = event.target?.result as string
       if (!content) return
       try {
-        const parsed = JSON.parse(content)
-        if (!parsed || !Array.isArray(parsed.weeks) || parsed.weeks.length === 0) {
-          setImportStatus({ type: "error", msg: "Arquivo inválido: não contém semanas reconhecíveis." })
+        const parsed: unknown = JSON.parse(content)
+        if (!isValidBackup(parsed)) {
+          setImportStatus({ type: "error", msg: locale === "en-US" ? "The backup is invalid or incomplete. Your current data has not been changed." : "O backup é inválido ou incompleto. Seus dados atuais não foram alterados." })
           return
         }
         // Stage for confirmation
         setPendingImport({
           raw: content,
           weekCount: parsed.weeks.length,
-          weekTitles: parsed.weeks.slice(0, 5).map((w: any) => w.title ?? "Semana sem título"),
-          exportedAt: parsed.exportedAt ?? null,
+          weekTitles: parsed.weeks.slice(0, 5).map((week) => String(week.title)),
+          exportedAt: typeof parsed.exportedAt === "string" && Number.isFinite(Date.parse(parsed.exportedAt)) ? parsed.exportedAt : null,
         })
       } catch {
-        setImportStatus({ type: "error", msg: "Arquivo corrompido ou não é um JSON válido." })
+        setImportStatus({ type: "error", msg: copy("Arquivo corrompido ou não é um JSON válido.") })
       }
     }
+    reader.onerror = () => setImportStatus({ type: "error", msg: locale === "en-US" ? "The file could not be read. Try another backup." : "Não foi possível ler o arquivo. Tente outro backup." })
     reader.readAsText(file)
     e.target.value = ""
   }
@@ -181,13 +243,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
     const ok = importFromJSON(pendingImport.raw)
     setPendingImport(null)
     if (ok) {
-      setImportStatus({ type: "success", msg: "Backup restaurado com sucesso!" })
+      setImportStatus({ type: "success", msg: copy("Backup restaurado com sucesso!") })
     } else {
-      setImportStatus({ type: "error", msg: "Falha ao restaurar backup. Arquivo inválido ou corrompido." })
+      setImportStatus({ type: "error", msg: copy("Falha ao restaurar backup. Arquivo inválido ou corrompido.") })
     }
   }
 
-  const days = activeWeek ? getWeekDays(activeWeek.startDate) : []
+  const days = activeWeek ? getWeekDays(activeWeek.startDate, locale) : []
   const activities = activeWeek?.programacao?.activities || []
   const dayActivities = activities
     .filter((a) => a.dayIndex === selectedDayIndex)
@@ -195,6 +257,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
@@ -214,8 +278,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Palette className="size-4" aria-hidden="true" />
             </div>
-            <h3 className="font-serif text-lg font-semibold text-foreground">
-              {t.settings.title}
+            <h3 id="settings-modal-title" className="font-serif text-lg font-semibold text-foreground">
+              {titleCase(t.settings.title)}
             </h3>
           </div>
           <button
@@ -232,11 +296,12 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Navigation Bar / Tabs */}
           <nav
-            aria-label="Abas de configuração"
+            aria-label={copy("Abas de configuração")}
             className="flex flex-row md:flex-col shrink-0 border-b md:border-b-0 md:border-r border-border bg-muted/20 p-2 gap-1 overflow-x-auto md:w-56"
           >
             <button
               type="button"
+              aria-pressed={activeTab === "semanas"}
               onClick={() => setActiveTab("semanas")}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
@@ -254,6 +319,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
             <button
               type="button"
+              aria-pressed={activeTab === "programacao"}
               onClick={() => setActiveTab("programacao")}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
@@ -268,6 +334,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
             <button
               type="button"
+              aria-pressed={activeTab === "aparencia"}
               onClick={() => setActiveTab("aparencia")}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
@@ -282,6 +349,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
             <button
               type="button"
+              aria-pressed={activeTab === "exportacao"}
               onClick={() => setActiveTab("exportacao")}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition touch-manipulation whitespace-nowrap min-h-[2.5rem]",
@@ -296,13 +364,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
           </nav>
 
           {/* Main Content Body */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          <fieldset disabled={storageReadOnly && activeTab !== "exportacao"} aria-label={locale === "en-US" ? "Settings content" : "Conteúdo das configurações"} className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
             {/* TAB 1: SEMANAS */}
             {activeTab === "semanas" && (
               <div className="space-y-6">
                 <div>
                   <h3 className="font-serif text-base font-semibold text-foreground">
-                    {t.settings.semanasTab.title}
+                    {titleCase(t.settings.semanasTab.title)}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {t.settings.semanasTab.desc}
@@ -311,17 +379,18 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* Form: Criar Nova Semana */}
                 <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
-                    {t.settings.semanasTab.newWeekBtn}
+                  <h4 className="text-xs font-bold tracking-wider text-primary">
+                    {titleCase(t.settings.semanasTab.newWeekBtn)}
                   </h4>
                   <form onSubmit={handleCreateWeek} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-5 space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
+                      <label htmlFor="settings-newWeekTitle" className="text-xs font-medium text-foreground block">
                         {t.week.titleLabel}
                       </label>
-                      <input
+                      <input id="settings-newWeekTitle"
                         type="text"
-                        placeholder={`Ex: ${t.week.weekNumberLabel} ${weeks.length + 1}`}
+                        placeholder={`${locale === "en-US" ? "For example:" : "Exemplo:"} ${t.week.weekNumberLabel} ${weeks.length + 1}`}
+                        maxLength={120}
                         value={newWeekTitle}
                         onChange={(e) => setNewWeekTitle(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
@@ -330,10 +399,10 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     </div>
 
                     <div className="sm:col-span-4 space-y-1">
-                      <label className="text-xs font-medium text-foreground block">
+                      <label htmlFor="settings-newWeekStartDate" className="text-xs font-medium text-foreground block">
                         {t.week.startDateLabel}
                       </label>
-                      <input
+                      <input id="settings-newWeekStartDate"
                         type="date"
                         value={newWeekStartDate}
                         onChange={(e) => setNewWeekStartDate(e.target.value)}
@@ -361,7 +430,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <AlertTriangle className="size-5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
                       <div>
                         <h4 className="text-sm font-semibold text-destructive">
-                          {t.settings.semanasTab.confirmDeletePrefix} &quot;{deletingWeek.title}&quot;?
+                          {titleCase(t.settings.semanasTab.confirmDeletePrefix)} &quot;{deletingWeek.title}&quot;?
                         </h4>
                         <p className="text-xs text-muted-foreground mt-1">
                           {t.week.deleteDesc} ({formatDateRangeLocale(deletingWeek.startDate, deletingWeek.endDate, locale)}).
@@ -389,8 +458,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* List of Existing Weeks */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {t.nav.weeks} ({weeks.length})
+                  <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                    {titleCase(t.nav.weeks)} ({weeks.length})
                   </h4>
 
                   <div className="grid grid-cols-1 gap-2.5">
@@ -423,14 +492,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                               {t.common.period} <span className="font-medium text-foreground">{rangeStr}</span>
                             </p>
                             <div className="flex items-center gap-2 pt-1 flex-wrap">
-                              <div className="w-28 sm:w-32 bg-secondary rounded-full h-1.5 overflow-hidden">
-                                <div
-                                  className="bg-primary h-full transition-all duration-300"
-                                  style={{ width: `${w.progresso.percentual}%` }}
-                                />
-                              </div>
                               <span className="text-[0.7rem] font-medium text-muted-foreground">
-                                {w.progresso.concluidas}/{w.progresso.total} {t.common.tasks} ({w.progresso.percentual}%)
+                                {w.progresso.concluidas}/{w.progresso.total} {t.common.tasks}
                               </span>
                             </div>
                           </div>
@@ -471,10 +534,10 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
               <div className="space-y-6">
                 <div>
                   <h3 className="font-serif text-base font-semibold text-foreground">
-                    Programação de Atividades ({activeWeek?.title ?? "Semana Selecionada"})
+                    {titleCase(copy("Rotina de atividades"))} ({titleCase(activeWeek?.title ?? copy("Semana Selecionada"))})
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Adicione, altere os horários ou remova compromissos para cada dia da semana ativa.
+                    {copy("Adicione, altere os horários ou remova compromissos para cada dia da semana ativa.")}
                   </p>
                 </div>
 
@@ -488,6 +551,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                       <button
                         key={d.dayIndex}
                         type="button"
+                        aria-pressed={selectedDayIndex === d.dayIndex}
                         onClick={() => setSelectedDayIndex(d.dayIndex)}
                         className={cn(
                           "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition whitespace-nowrap touch-manipulation min-h-[2.25rem]",
@@ -508,15 +572,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* Form: Add Activity for selected day */}
                 <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-primary">
-                    + Adicionar Atividade ({days[selectedDayIndex]?.dayNumberLabel} - {days[selectedDayIndex]?.formattedShort})
+                  <h4 className="text-xs font-bold tracking-wider text-primary">
+                    {titleCase(copy("Adicionar atividade"))} ({titleCase(days[selectedDayIndex]?.dayNumberLabel)} - {titleCase(days[selectedDayIndex]?.formattedShort)})
                   </h4>
                   <form onSubmit={handleAddActivity} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                     <div className="sm:col-span-3 space-y-1">
-                      <label className="text-xs font-medium text-foreground block">Horário</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 16:30"
+                      <label htmlFor="settings-newActTime" className="text-xs font-medium text-foreground block">{copy("Horário")}</label>
+                      <input id="settings-newActTime"
+                        type="time"
                         value={newActTime}
                         onChange={(e) => setNewActTime(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
@@ -525,10 +588,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     </div>
 
                     <div className="sm:col-span-6 space-y-1">
-                      <label className="text-xs font-medium text-foreground block">Descrição da Tarefa</label>
-                      <input
+                      <label htmlFor="settings-newActDesc" className="text-xs font-medium text-foreground block">{copy("Descrição da Tarefa")}</label>
+                      <input id="settings-newActDesc"
                         type="text"
-                        placeholder="Ex: Ativação 15 min / Saída"
+                        maxLength={1200}
+                        placeholder={locale === "en-US" ? "For example: 15-minute walk" : "Exemplo: caminhada de 15 minutos"}
                         value={newActDesc}
                         onChange={(e) => setNewActDesc(e.target.value)}
                         /* font-size 16px to prevent iOS auto-zoom */
@@ -543,7 +607,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         className="w-full flex items-center justify-center gap-1 rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition touch-manipulation min-h-[2.5rem]"
                       >
                         <Plus className="size-4" aria-hidden="true" />
-                        <span>Adicionar</span>
+                        <span>{copy("Adicionar")}</span>
                       </button>
                     </div>
                   </form>
@@ -551,13 +615,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* List of activities for selected day */}
                 <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Atividades do Dia ({dayActivities.length})
+                  <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                    {titleCase(copy("Atividades deste dia"))} ({dayActivities.length})
                   </h4>
 
                   {dayActivities.length === 0 ? (
                     <p className="p-4 text-center text-xs italic text-muted-foreground rounded-lg border border-dashed border-border">
-                      Nenhuma atividade cadastrada para este dia. Adicione uma atividade acima!
+                      {locale === "en-US" ? "No activities scheduled for this day. Add one whenever you wish." : "Nenhuma atividade cadastrada para este dia. Adicione uma quando quiser."}
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -572,7 +636,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                             >
                               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                                 <input
-                                  type="text"
+                                  type="time"
+                                  aria-label={t.schedule.timeLabel}
                                   value={editActTime}
                                   onChange={(e) => setEditActTime(e.target.value)}
                                   className="sm:col-span-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
@@ -580,6 +645,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                                 />
                                 <input
                                   type="text"
+                                  aria-label={t.schedule.descLabel}
+                                  maxLength={1200}
                                   value={editActDesc}
                                   onChange={(e) => setEditActDesc(e.target.value)}
                                   className="sm:col-span-7 rounded-md border border-border bg-background px-2.5 py-1.5 text-base font-medium"
@@ -678,8 +745,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* Idioma da Interface */}
                 <div className="space-y-3">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {t.settings.language.label}
+                    <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                      {titleCase(t.settings.language.label)}
                     </h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {t.settings.language.desc}
@@ -699,7 +766,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     >
                       <div className="flex items-center gap-2.5">
                         <span className="text-base leading-none">🇧🇷</span>
-                        <span className="text-xs font-semibold text-foreground">Português (Brasil)</span>
+                        <span className="text-xs font-semibold text-foreground">{t.settings.language.ptBR}</span>
                       </div>
                       {locale === "pt-BR" && <Check className="size-4 text-primary" aria-hidden="true" />}
                     </button>
@@ -716,7 +783,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                     >
                       <div className="flex items-center gap-2.5">
                         <span className="text-base leading-none">🇺🇸</span>
-                        <span className="text-xs font-semibold text-foreground">English (US)</span>
+                        <span className="text-xs font-semibold text-foreground">{t.settings.language.enUS}</span>
                       </div>
                       {locale === "en-US" && <Check className="size-4 text-primary" aria-hidden="true" />}
                     </button>
@@ -727,8 +794,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {activeGuide.theologyEnabled && (
                   <div className="space-y-3 pt-4 border-t border-border">
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        {t.settings.bibleVersion.label}
+                      <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                        {titleCase(t.settings.bibleVersion.label)}
                       </h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {t.settings.bibleVersion.desc}
@@ -750,7 +817,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           >
                             <div>
                               <p className="text-xs font-semibold text-foreground">King James Version (KJV)</p>
-                              <p className="text-[0.7rem] text-muted-foreground">Classic canonical translation</p>
+                              <p className="text-[0.7rem] text-muted-foreground">Traditional English translation</p>
                             </div>
                             {bibleVersion === "KJV" && <Check className="size-4 text-primary" aria-hidden="true" />}
                           </button>
@@ -786,7 +853,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           >
                             <div>
                               <p className="text-xs font-semibold text-foreground">Almeida Revista e Atualizada (ARA)</p>
-                              <p className="text-[0.7rem] text-muted-foreground">Tradução clássica de referência</p>
+                              <p className="text-[0.7rem] text-muted-foreground">{copy("Tradução clássica de referência")}</p>
                             </div>
                             {bibleVersion === "ARA" && <Check className="size-4 text-primary" aria-hidden="true" />}
                           </button>
@@ -803,7 +870,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           >
                             <div>
                               <p className="text-xs font-semibold text-foreground">Nova Versão Transformadora (NVT)</p>
-                              <p className="text-[0.7rem] text-muted-foreground">Linguagem contemporânea e clara</p>
+                              <p className="text-[0.7rem] text-muted-foreground">{copy("Linguagem contemporânea e clara")}</p>
                             </div>
                             {bibleVersion === "NVT" && <Check className="size-4 text-primary" aria-hidden="true" />}
                           </button>
@@ -815,13 +882,14 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* Tema */}
                 <div className="space-y-3 pt-4 border-t border-border">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {t.settings.theme.label}
+                  <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                    {titleCase(t.settings.theme.label)}
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <button
                       type="button"
+                      aria-pressed={theme === "light"}
                       onClick={() => setTheme("light")}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border p-3.5 transition text-left touch-manipulation",
@@ -841,6 +909,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                     <button
                       type="button"
+                      aria-pressed={theme === "dark"}
                       onClick={() => setTheme("dark")}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border p-3.5 transition text-left touch-manipulation",
@@ -860,6 +929,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                     <button
                       type="button"
+                      aria-pressed={theme === "system"}
                       onClick={() => setTheme("system")}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border p-3.5 transition text-left touch-manipulation",
@@ -881,8 +951,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                 {/* Paleta de Cores */}
                 <div className="space-y-3 pt-4 border-t border-border">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    {t.settings.palette.label}
+                  <h4 className="text-xs font-bold tracking-wider text-muted-foreground">
+                    {titleCase(t.settings.palette.label)}
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -893,6 +963,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         <button
                           key={p.id}
                           type="button"
+                          aria-pressed={palette === p.id}
                           onClick={() => setPalette(p.id)}
                           className={cn(
                             "flex flex-col gap-2 rounded-xl border p-3.5 transition text-left touch-manipulation",
@@ -903,11 +974,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         >
                           <div className="flex items-center justify-between w-full">
                             <span className="text-xs font-semibold text-foreground">
-                              {p.name}
+                              {copy(p.name)}
                             </span>
                             {isSel && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[0.65rem] font-bold text-primary">
-                                <Check className="size-3" aria-hidden="true" /> Ativa
+                                <Check className="size-3" aria-hidden="true" /> {copy("Ativa")}
                               </span>
                             )}
                           </div>
@@ -918,31 +989,31 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                               <span
                                 className="size-3.5 rounded-full border border-black/10 shadow-2xs"
                                 style={{ backgroundColor: p.bgHex }}
-                                title="Fundo (Background)"
+                                title={copy("Fundo (Background)")}
                               />
                               <span
                                 className="size-3.5 rounded-full border border-black/10 shadow-2xs"
                                 style={{ backgroundColor: p.cardHex }}
-                                title="Superfície (Card)"
+                                title={copy("Superfície (Card)")}
                               />
                               <span
                                 className="size-3.5 rounded-full border border-black/10 shadow-2xs"
                                 style={{ backgroundColor: p.primaryHex }}
-                                title="Cor Primária"
+                                title={copy("Cor Primária")}
                               />
                               <span
                                 className="size-3.5 rounded-full border border-black/10 shadow-2xs"
                                 style={{ backgroundColor: p.goldHex }}
-                                title="Destaque / Títulos"
+                                title={copy("Destaque / Títulos")}
                               />
                             </div>
                             <span className="text-[0.65rem] text-muted-foreground font-medium">
-                              {p.subtitle}
+                              {copy(p.subtitle)}
                             </span>
                           </div>
 
                           <p className="text-[0.7rem] text-muted-foreground leading-relaxed">
-                            {p.description}
+                            {copy(p.description)}
                           </p>
                         </button>
                       )
@@ -956,33 +1027,35 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
             {activeTab === "exportacao" && (
               <div className="space-y-8">
 
+                {aiError && <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-relaxed text-destructive">{aiError}</p>}
+
                 {/* Import Confirmation Dialog */}
                 {pendingImport && (
                   <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
                     <div className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 text-lg leading-none">⚠️</span>
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Confirmar restauração de backup?</p>
+                        <p className="text-sm font-semibold text-foreground">{copy("Confirmar restauração de backup?")}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Isso <strong>substituirá todos os dados atuais</strong> pelo conteúdo do arquivo.
+                          {copy("Isso")} <strong>{copy("substituirá todos os dados atuais")}</strong> {copy("pelo conteúdo do arquivo.")}
                         </p>
                       </div>
                     </div>
                     <div className="rounded-lg bg-background/70 border border-border p-3 text-xs space-y-1">
                       <p className="font-semibold text-foreground">
-                        {pendingImport.weekCount} {pendingImport.weekCount === 1 ? "semana" : "semanas"} no arquivo:
+                        {pendingImport.weekCount} {pendingImport.weekCount === 1 ? t.week.weekSingular : t.week.weekPlural} {copy("no arquivo:")}
                       </p>
                       <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
                         {pendingImport.weekTitles.map((t, i) => (
                           <li key={i}>{t}</li>
                         ))}
                         {pendingImport.weekCount > 5 && (
-                          <li className="text-muted-foreground/60">...e mais {pendingImport.weekCount - 5}</li>
+                          <li className="text-muted-foreground/60">{copy("...e mais")} {pendingImport.weekCount - 5}</li>
                         )}
                       </ul>
                       {pendingImport.exportedAt && (
                         <p className="text-muted-foreground pt-1">
-                          Exportado em: {new Date(pendingImport.exportedAt).toLocaleString("pt-BR")}
+                          {copy("Exportado em:")} {new Date(pendingImport.exportedAt).toLocaleString(locale)}
                         </p>
                       )}
                     </div>
@@ -992,7 +1065,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         onClick={handleConfirmImport}
                         className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 transition touch-manipulation"
                       >
-                        Restaurar agora
+                        {copy("Restaurar agora")}
                       </button>
                       <button
                         type="button"
@@ -1008,6 +1081,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* Import / Export status message */}
                 {importStatus && (
                   <div
+                    role={importStatus.type === "error" ? "alert" : "status"}
                     className={cn(
                       "rounded-lg p-3 text-xs font-medium flex items-center justify-between border",
                       importStatus.type === "success"
@@ -1030,7 +1104,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* ── SECTION A: EXPORTAR SEMANA ATUAL ── */}
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-serif text-base font-semibold text-foreground">{t.settings.exportTab.currentWeekTitle}</h3>
+                    <h3 className="font-serif text-base font-semibold text-foreground">{titleCase(t.settings.exportTab.currentWeekTitle)}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {t.settings.exportTab.currentWeekDesc}
                     </p>
@@ -1038,13 +1112,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
                   <div className="grid grid-cols-1 gap-3">
                     {/* PDF / Print */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
+                    {!isNativeApp() && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
                       <div className="flex items-start gap-3">
                         <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
                           <Printer className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportPdf}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{titleCase(t.export.exportPdf)}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {t.settings.exportTab.pdfDesc}
                           </p>
@@ -1058,7 +1132,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         <Printer className="size-4" aria-hidden="true" />
                         <span>{t.export.printPdf}</span>
                       </button>
-                    </div>
+                    </div>}
 
                     {/* Markdown */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 transition hover:border-primary/40">
@@ -1067,7 +1141,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           <FileText className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportToMarkdown}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{titleCase(t.export.exportToMarkdown)}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {t.settings.exportTab.markdownDesc}
                           </p>
@@ -1090,7 +1164,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                           <FileJson className="size-5" aria-hidden="true" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground">{t.export.exportWeekJson}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{titleCase(t.export.exportWeekJson)}</h4>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {t.settings.exportTab.weekJsonDesc}
                           </p>
@@ -1114,7 +1188,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                 {/* ── SECTION B: BACKUP COMPLETO ── */}
                 <div className="space-y-3">
                   <div>
-                    <h3 className="font-serif text-base font-semibold text-foreground">{t.settings.exportTab.backupTitle}</h3>
+                    <h3 className="font-serif text-base font-semibold text-foreground">{titleCase(t.settings.exportTab.backupTitle)}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {t.settings.exportTab.backupDesc}
                     </p>
@@ -1126,7 +1200,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
                         <Database className="size-5" aria-hidden="true" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-foreground">{t.export.backupJson}</h4>
+                        <h4 className="text-sm font-semibold text-foreground">{titleCase(t.export.backupJson)}</h4>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {t.settings.exportTab.backupFullDesc}
                         </p>
@@ -1165,7 +1239,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas" }: Setti
 
               </div>
             )}
-          </div>
+          </fieldset>
         </div>
 
         {/* Modal Footer */}

@@ -15,15 +15,16 @@ const lora = Lora({
 })
 
 export const metadata: Metadata = {
-  title: 'Guia de Retomada · Ciclos Semanais',
+  title: 'Anew · Seven Days. Small Steps.',
   description:
-    'Guia de Retomada — recomeçar com clareza, constância e esperança. Um plano pessoal em ciclos de 7 dias com exercícios, Escritura e acompanhamento semanal.',
-  generator: 'v0.app',
+    'A calm seven-day planner with small steps, ready-made weeks without AI, and guides you can make your own. Your week, at your pace.',
+  applicationName: 'Anew',
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
+  colorScheme: 'light dark',
   themeColor: '#e8e5d8',
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({
@@ -32,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={`${geist.variable} ${lora.variable} bg-background`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${lora.variable} bg-background`}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -41,7 +42,7 @@ export default function RootLayout({
                 try {
                   var t = localStorage.getItem('guia-theme');
                   var p = localStorage.getItem('guia-palette');
-                  var isDark = t === 'dark' || ((!t || t === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  var isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                   } else {

@@ -5,6 +5,7 @@ import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Check, X } from "lucide-react"
 import { useStore, type ScheduleActivity } from "@/lib/store"
 import { getWeekDays } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
+import { useModalAccessibility } from "@/components/modal-accessibility"
 
 export function InteractiveScheduleBlock() {
   const {
@@ -27,6 +28,7 @@ export function InteractiveScheduleBlock() {
   const [descInput, setDescInput] = useState("")
   const [daySelect, setDaySelect] = useState<number>(0)
   const [countsTowardCompletion, setCountsTowardCompletion] = useState<boolean>(true)
+  const dialogRef = useModalAccessibility(addingForDay !== null || editingAct !== null, () => { setAddingForDay(null); setEditingAct(null) })
 
   if (!activeWeek) return null
 
@@ -77,7 +79,7 @@ export function InteractiveScheduleBlock() {
   return (
     <div className="space-y-4">
       {/* 7-Day Grid — responsive: 1 col → 2 col → 3 col → 7 col */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
         {days.map((day) => {
           const dayActs = activities
             .filter((a) => a.dayIndex === day.dayIndex)
@@ -86,7 +88,7 @@ export function InteractiveScheduleBlock() {
           return (
             <div
               key={day.dayIndex}
-              className="flex flex-col rounded-lg border border-border bg-card p-3 shadow-xs transition hover:border-primary/30"
+              className="flex flex-col rounded-xl border border-border bg-background/30 p-4 transition hover:border-primary/30"
             >
               {/* Day Header */}
               <div className="mb-2.5 flex items-center justify-between border-b border-border/80 pb-2">
@@ -101,7 +103,7 @@ export function InteractiveScheduleBlock() {
                   onClick={() => handleOpenAdd(day.dayIndex)}
                   title={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
                   aria-label={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
-                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation"
+                  className="icon-button text-muted-foreground hover:bg-primary/10 hover:text-primary"
                 >
                   <Plus className="size-3.5" aria-hidden="true" />
                 </button>
@@ -132,7 +134,7 @@ export function InteractiveScheduleBlock() {
                             aria-label={done ? `${t.common.cancel}: ${act.description}` : `${t.common.done}: ${act.description}`}
                             onClick={() => toggleDone(act.id)}
                             className={cn(
-                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition touch-manipulation",
+                              "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border transition touch-manipulation",
                               done
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-input hover:border-primary"
@@ -152,7 +154,7 @@ export function InteractiveScheduleBlock() {
                                 </span>
                               )}
                             </div>
-                            <p className={cn("leading-snug break-words text-foreground", done && "line-through text-muted-foreground")}>
+                            <p className={cn("text-sm leading-relaxed break-words text-foreground", done && "line-through text-muted-foreground")}>
                               {act.description}
                             </p>
                           </div>
@@ -160,7 +162,7 @@ export function InteractiveScheduleBlock() {
 
                         {/* Actions toolbar */}
                         <div className="mt-1.5 flex items-center justify-end gap-1 transition
-                          opacity-100 sm:opacity-0 sm:group-hover:opacity-100
+                          opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100
                           [@media(hover:none)]:opacity-100">
                           <button
                             type="button"
@@ -224,6 +226,8 @@ export function InteractiveScheduleBlock() {
       {/* Add / Edit Activity Modal */}
       {(addingForDay !== null || editingAct !== null) && (
         <div
+          ref={dialogRef}
+          tabIndex={-1}
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="dialog"
           aria-modal="true"
@@ -254,10 +258,11 @@ export function InteractiveScheduleBlock() {
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-foreground">
+                <label htmlFor="schedule-day" className="mb-1 block text-xs font-semibold text-foreground">
                   {t.schedule.dayOfWeek}
                 </label>
                 <select
+                  id="schedule-day"
                   value={daySelect}
                   onChange={(e) => setDaySelect(Number(e.target.value))}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
@@ -271,12 +276,12 @@ export function InteractiveScheduleBlock() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-foreground">
+                <label htmlFor="schedule-time" className="mb-1 block text-xs font-semibold text-foreground">
                   {t.schedule.timeLabel}
                 </label>
                 <input
-                  type="text"
-                  placeholder="Ex: 16:30"
+                  id="schedule-time"
+                  type="time"
                   value={timeInput}
                   onChange={(e) => setTimeInput(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
@@ -284,10 +289,12 @@ export function InteractiveScheduleBlock() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-foreground">
+                <label htmlFor="schedule-description" className="mb-1 block text-xs font-semibold text-foreground">
                   {t.schedule.descLabel}
                 </label>
                 <textarea
+                  id="schedule-description"
+                  maxLength={1200}
                   rows={3}
                   required
                   placeholder={t.schedule.activityPlaceholder}

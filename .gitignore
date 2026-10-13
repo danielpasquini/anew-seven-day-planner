@@ -13,3 +13,16 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Signing credentials
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+
+# Expo development state and generated native builds
+.expo/
+native/.expo/
+native/dist/
+native/android/
+native/ios/

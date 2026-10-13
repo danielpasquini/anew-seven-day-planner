@@ -1,10 +1,7 @@
-import { StoreProvider } from "@/lib/store"
-import { GuideApp } from "@/components/guide-app"
+import { AppProviders } from "@/components/app-providers"
 
 export default function Page() {
   return (
-    <StoreProvider>
-      <GuideApp />
-    </StoreProvider>
+    <AppProviders />
   )
 }

@@ -1,5 +1,7 @@
 "use client"
 
+import { titleCase } from "@/lib/title-case"
+
 import { Check } from "lucide-react"
 import type { Block, Field } from "@/lib/guide-data"
 import { cn } from "@/lib/utils"
@@ -7,10 +9,11 @@ import { useStore } from "@/lib/store"
 import { ScaleField, TextAreaField, TextField } from "@/components/fields"
 import { InteractiveScheduleBlock } from "@/components/schedule-block"
 
-function FieldRenderer({ field }: { field: Field }) {
+function FieldRenderer({ field, preview = false }: { field: Field; preview?: boolean }) {
   if (field.kind === "static") {
     return <p className="text-sm font-semibold text-primary">{field.text}</p>
   }
+  if (preview) return <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4"><p className="text-sm font-medium">{field.label}</p><div className="mt-3 h-px w-2/3 bg-border" aria-hidden="true" /></div>
   if (field.kind === "text") {
     return <TextField id={field.id} label={field.label} />
   }
@@ -50,16 +53,19 @@ function ScheduleCell({ id, text }: { id: string; text: string }) {
 }
 
 function LadderRow({ id, label }: { id: string; label: string }) {
-  const { isDone, toggleDone, getText, setText } = useStore()
+  const { isDone, toggleDone, getText, setText, locale } = useStore()
   const done = isDone(id)
   return (
     <tr className="border-t border-border/70 hover:bg-muted/30 transition">
       <td className="py-3 pl-4 pr-3 align-middle text-sm font-medium text-foreground">{label}</td>
       <td className="py-3 px-3 align-middle text-center">
         <input
-          type="text"
+          type="number"
+          min={0}
+          max={10}
+          step={1}
           inputMode="numeric"
-          aria-label={`Nota prevista: ${label}`}
+          aria-label={`${locale === "en-US" ? "Your own rating for" : "Sua percepção de"}: ${label}`}
           placeholder="0–10"
           value={getText(`${id}-nota`)}
           onChange={(e) => setText(`${id}-nota`, e.target.value)}
@@ -71,10 +77,10 @@ function LadderRow({ id, label }: { id: string; label: string }) {
           type="button"
           role="checkbox"
           aria-checked={done}
-          aria-label={`Marcar feito: ${label}`}
+          aria-label={`${locale === "en-US" ? "Mark as done" : "Marcar como feito"}: ${label}`}
           onClick={() => toggleDone(id)}
           className={cn(
-            "flex size-6 items-center justify-center rounded-md border-2 transition mx-auto touch-manipulation",
+            "flex size-11 items-center justify-center rounded-xl border-2 transition mx-auto touch-manipulation",
             done ? "border-primary bg-primary text-primary-foreground shadow-xs" : "border-input bg-card hover:border-primary/60",
           )}
         >
@@ -85,7 +91,7 @@ function LadderRow({ id, label }: { id: string; label: string }) {
   )
 }
 
-export function BlockRenderer({ block }: { block: Block }) {
+export function BlockRenderer({ block, preview = false }: { block: Block; preview?: boolean }) {
   switch (block.type) {
     case "lead":
       return (
@@ -95,7 +101,7 @@ export function BlockRenderer({ block }: { block: Block }) {
       return <p className="leading-relaxed text-foreground/90 text-pretty">{block.text}</p>
     case "h":
       return (
-        <h3 className="mt-2 font-serif text-xl font-semibold text-foreground text-balance">{block.text}</h3>
+        <h3 className="mt-2 font-serif text-xl font-semibold text-foreground text-balance">{titleCase(block.text)}</h3>
       )
     case "list":
       return (
@@ -173,7 +179,7 @@ export function BlockRenderer({ block }: { block: Block }) {
             </thead>
             <tbody>
               {block.rows.map((row) => (
-                <LadderRow key={row.id} id={row.id} label={row.label} />
+                preview ? <tr key={row.id}><td colSpan={3} className="border-t border-border px-4 py-3 text-sm">{row.label}</td></tr> : <LadderRow key={row.id} id={row.id} label={row.label} />
               ))}
             </tbody>
           </table>
@@ -183,11 +189,11 @@ export function BlockRenderer({ block }: { block: Block }) {
       return (
         <div className="rounded-lg border border-border bg-card p-4 sm:p-5">
           {block.title && (
-            <h4 className="mb-4 font-serif text-lg font-semibold text-foreground text-balance">{block.title}</h4>
+            <h4 className="mb-4 font-serif text-lg font-semibold text-foreground text-balance">{titleCase(block.title)}</h4>
           )}
           <div className="space-y-4">
             {block.fields.map((field, i) => (
-              <FieldRenderer key={i} field={field} />
+              <FieldRenderer key={i} field={field} preview={preview} />
             ))}
           </div>
           {block.note && (
@@ -198,8 +204,13 @@ export function BlockRenderer({ block }: { block: Block }) {
         </div>
       )
     case "schedule":
-      return <InteractiveScheduleBlock />
+      return preview ? <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4"><CalendarPreview /></div> : <InteractiveScheduleBlock />
     default:
       return null
   }
+}
+
+function CalendarPreview() {
+  const { locale } = useStore()
+  return <p className="text-sm leading-relaxed text-muted-foreground">{locale === "en-US" ? "Your personal space includes an editable seven-day routine. Each activity can be adapted, skipped or replaced by rest." : "Seu espaço pessoal inclui uma rotina editável de sete dias. Cada atividade pode ser adaptada, pulada ou substituída por descanso."}</p>
 }

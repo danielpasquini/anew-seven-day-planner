@@ -50,7 +50,7 @@ export function getNextDayDate(dateStr: string): string {
 /**
  * Format YYYY-MM-DD to localized date string
  */
-export function formatDateLocale(dateStr: string, locale: Locale = "pt-BR"): string {
+export function formatDateLocale(dateStr: string, locale: Locale = "en-US"): string {
   if (!dateStr) return ""
   const parts = dateStr.split("-").map(Number)
   if (parts.length !== 3) return dateStr
@@ -68,7 +68,7 @@ export function formatDateBR(dateStr: string): string {
  * pt-BR: "10 a 16/08/2026" or "10 a 16 de agosto de 2026"
  * en-US: "August 10–16, 2026"
  */
-export function formatDateRangeLocale(startDateStr: string, endDateStr: string, locale: Locale = "pt-BR"): string {
+export function formatDateRangeLocale(startDateStr: string, endDateStr: string, locale: Locale = "en-US"): string {
   if (!startDateStr || !endDateStr) return ""
   const [sy, sm, sd] = startDateStr.split("-").map(Number)
   const [ey, em, ed] = endDateStr.split("-").map(Number)
@@ -123,7 +123,7 @@ export type WeekDayInfo = {
  * Returns an array of 7 day objects for a week starting at startDateStr:
  * [{ dayIndex: 0, dateStr: "2026-08-10", dayName: "Seg", dayNumberLabel: "Dia 1", formattedShort: "Seg 10/08" }, ...]
  */
-export function getWeekDays(startDateStr: string, locale: Locale = "pt-BR"): WeekDayInfo[] {
+export function getWeekDays(startDateStr: string, locale: Locale = "en-US"): WeekDayInfo[] {
   if (!startDateStr) return []
   const parts = startDateStr.split("-").map(Number)
   if (parts.length !== 3) return []

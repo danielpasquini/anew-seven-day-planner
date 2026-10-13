@@ -13,7 +13,8 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
   }
 
   const isEn = locale === "en-US"
-  const primaryVersion = bibleVersion || (isEn ? "KJV" : "ARA")
+  const availableVersions = BibleProvider.getAvailableVersions(locale)
+  const primaryVersion = availableVersions.includes(bibleVersion) ? bibleVersion : BibleProvider.getDefaultVersion(locale)
   const secondaryVersion = isEn
     ? primaryVersion === "KJV" ? "NIV" : "KJV"
     : primaryVersion === "ARA" ? "NVT" : "ARA"
@@ -30,8 +31,9 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
           const primaryResolved = BibleProvider.resolvePassage(verse.ref, primaryVersion, locale)
           const secondaryResolved = BibleProvider.resolvePassage(verse.ref, secondaryVersion, locale)
 
-          const primaryText = primaryResolved.text || (primaryVersion === "ARA" ? verse.ara : primaryVersion === "NVT" ? verse.nvt : primaryVersion === "KJV" ? verse.kjv : verse.niv) || verse.ara
-          const secondaryText = secondaryResolved.text || (secondaryVersion === "ARA" ? verse.ara : secondaryVersion === "NVT" ? verse.nvt : secondaryVersion === "KJV" ? verse.kjv : verse.niv) || verse.nvt
+          const primaryText = primaryResolved.text || (primaryVersion === "ARA" ? verse.ara : primaryVersion === "NVT" ? verse.nvt : primaryVersion === "KJV" ? verse.kjv : verse.niv)
+          const secondaryText = secondaryResolved.text || (secondaryVersion === "ARA" ? verse.ara : secondaryVersion === "NVT" ? verse.nvt : secondaryVersion === "KJV" ? verse.kjv : verse.niv)
+          const missingText = isEn ? "An English text for this reference is not available in this guide." : "Não há texto disponível para esta referência nesta versão do guia."
 
           return (
             <figure key={verse.ref}>
@@ -44,7 +46,7 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
                     {primaryVersion}
                   </span>
                   <p className="font-serif text-base italic leading-relaxed text-foreground text-pretty">
-                    {primaryText}
+                    {primaryText || missingText}
                   </p>
                 </blockquote>
                 <blockquote className="border-l-2 border-primary/40 pl-4">
@@ -52,7 +54,7 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
                     {secondaryVersion}
                   </span>
                   <p className="font-serif text-base italic leading-relaxed text-foreground text-pretty">
-                    {secondaryText}
+                    {secondaryText || missingText}
                   </p>
                 </blockquote>
               </div>
@@ -62,7 +64,7 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
       </div>
 
       <div className="mt-5 space-y-4 border-t border-primary/15 pt-5">
-        {scripture.comentario && (
+        {scripture.comentario && (!isEn || activeGuide.contentLocale === "en-US") && (
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary/70">
               {t.scripture.commentary}
@@ -72,7 +74,7 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
             </p>
           </div>
         )}
-        {scripture.oracao && (
+        {scripture.oracao && (!isEn || activeGuide.contentLocale === "en-US") && (
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-primary/80">
               {t.scripture.prayer}
@@ -82,6 +84,7 @@ export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
             </p>
           </div>
         )}
+        {isEn && activeGuide.contentLocale !== "en-US" && (scripture.comentario || scripture.oracao) && <p className="text-xs leading-relaxed text-muted-foreground">Commentary from this older guide is not available in English.</p>}
       </div>
 
       {/* Attribution notice if NIV is active */}
