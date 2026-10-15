@@ -2,7 +2,7 @@
 
 import { titleCase } from "@/lib/title-case"
 
-import { CheckCircle2, X, Sparkles } from "lucide-react"
+import { CheckCircle2, X } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useModalAccessibility } from "@/components/modal-accessibility"
 
@@ -12,7 +12,7 @@ type CompleteWeekModalProps = {
 }
 
 export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
-  const { activeWeek, completeWeek, isGeneratingAI, locale, t } = useStore()
+  const { activeWeek, completeWeek, isGeneratingAI, t } = useStore()
   const dialogRef = useModalAccessibility(isOpen, onClose)
 
   if (!isOpen || !activeWeek) return null
@@ -76,18 +76,18 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
 
           {/* Progress Card Snapshot */}
           <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
               <span className="text-foreground">{t.review.snapshotTitle}:</span>
-              <span className="text-primary">{completedTasks} / {totalTasks}</span>
+              <span className="text-primary">{totalTasks === 0 ? t.schedule.noCompletionTarget : `${completedTasks} / ${totalTasks}`}</span>
             </div>
 
 
-            <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground pt-1">
+            {totalTasks > 0 && <div className="flex items-center justify-between text-[0.75rem] text-muted-foreground pt-1">
               <span>{t.review.activeCountableTasks}</span>
               <span className="font-medium text-foreground">
                 {completedTasks} {t.common.of} {totalTasks}
               </span>
-            </div>
+            </div>}
           </div>
 
           <p className="text-[0.75rem] italic text-muted-foreground/90">
@@ -111,8 +111,8 @@ export function CompleteWeekModal({ isOpen, onClose }: CompleteWeekModalProps) {
             disabled={isGeneratingAI}
             className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition touch-manipulation disabled:opacity-50"
           >
-            <Sparkles className="size-4" aria-hidden="true" />
-            <span>{t.common.confirm}</span>
+            <CheckCircle2 className="size-4" aria-hidden="true" />
+            <span>{t.review.actionCloseWeek}</span>
           </button>
         </div>
       </div>

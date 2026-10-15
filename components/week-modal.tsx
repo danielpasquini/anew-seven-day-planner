@@ -8,7 +8,7 @@ import { useStore, type WeekInstance } from "@/lib/store"
 import { getPlannerPresets } from "@/lib/planner"
 import { setupFromPreviousWeek } from "@/lib/week-planning"
 import { isValidWeekSetup, WEEK_SETUP_LIMITS, type WeekSetup } from "@/lib/week-setup"
-import { getWeekOptions, selectedSpiritualPreference, selectedWeekPreference, type WeekOptionGroup } from "@/lib/week-options"
+import { getPsychologyDescriptions, getPsychologyHelpIntro, getWeekOptionHeading, getWeekOptions, selectedSpiritualPreference, selectedWeekPreference, type WeekOptionGroup } from "@/lib/week-options"
 import { useDemo } from "@/lib/demo"
 import { useAuth } from "@/lib/auth/client"
 import { getAuthToken } from "@/lib/auth/firebase-client"
@@ -16,14 +16,14 @@ import { apiUrl } from "@/lib/api-url"
 import { useModalAccessibility } from "@/components/modal-accessibility"
 import { isValidDate } from "@/lib/backup-validation"
 
-type CreateModalProps = { isOpen: boolean; onClose: () => void }
+type CreateModalProps = { isOpen: boolean; onClose: () => void; editWeekId?: string | null }
 type SetupTextField = keyof typeof WEEK_SETUP_LIMITS
 const SUGGESTION_FIELDS = ["name", "focus", "routineSchedule", "whatHelps", "thingsToAvoid", "additionalNotes"] as const
 type Suggestions = Record<typeof SUGGESTION_FIELDS[number], string>
 const inputClass = "w-full min-w-0 rounded-xl border border-input bg-background px-3 py-2.5 text-base text-foreground placeholder:text-gray-500 dark:placeholder:text-gray-400 outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
 
-export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
-  const { weeks, guides, activeWeek, activeGuide, createPlannedWeek, locale, t, storageReadOnly, starterIsPreview } = useStore()
+export function CreateWeekModal({ isOpen, onClose, editWeekId = null }: CreateModalProps) {
+  const { weeks, guides, activeWeek, activeGuide, createPlannedWeek, updateWeekSetup, locale, t, storageReadOnly, starterIsPreview } = useStore()
   const demo = useDemo()
   const { user, status: authStatus, legalAccepted } = useAuth()
   const en = locale === "en-US"
@@ -31,6 +31,8 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
   const prefix = useId()
   const [setup, setSetup] = useState<WeekSetup>({ pattern: "gentle", expectation: "" })
   const [startDate, setStartDate] = useState("")
+  const [initialPattern, setInitialPattern] = useState<WeekSetup["pattern"] | null>(null)
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [available, setAvailable] = useState<boolean | null>(null)
   const [shareOpen, setShareOpen] = useState(false)
@@ -49,22 +51,31 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
   sourceRef.current = { weeks, guides, activeWeek, activeGuide, starterIsPreview }
   const close = () => { requestRef.current?.abort(); onClose() }
   const dialogRef = useModalAccessibility(isOpen, close)
-  const blocked = storageReadOnly
+  const editing = editWeekId !== null
+  const sourceWeek = editing ? weeks.find((week) => week.id === editWeekId) : activeWeek
+  const sourceWeekId = editWeekId ?? activeWeek?.id
+  const targetUnavailable = editing && sourceWeek?.status !== "active"
+  const blocked = storageReadOnly || targetUnavailable
+  const patternChanged = editing && initialPattern !== null && setup.pattern !== initialPattern
   const accountCanUseAI = authStatus === "authenticated" && Boolean(user?.emailVerified) && legalAccepted
   const validStart = isValidDate(startDate)
   const endDate = validStart ? calculateInclusiveEndDate(startDate) : ""
   const validDates = validStart && isValidDate(endDate)
-  const noteCount = Object.values(activeWeek?.data.text ?? {}).filter((value) => value.length > 0).length
+  const noteCount = Object.values(sourceWeek?.data.text ?? {}).filter((value) => value.length > 0).length
+  const savedNotes = en ? `${noteCount} saved ${noteCount === 1 ? "note" : "notes"}` : `${noteCount} ${noteCount === 1 ? "anotação salva" : "anotações salvas"}`
   const presets = getPlannerPresets(locale)
 
   useEffect(() => {
     if (!isOpen) { requestRef.current?.abort(); return }
     const source = sourceRef.current
-    const owningGuide = source.guides.find((guide) => guide.id === (source.activeWeek?.guideId || source.activeWeek?.templateId)) ?? source.activeGuide
-    setSetup(setupFromPreviousWeek(source.activeWeek, owningGuide))
+    const target = editWeekId ? source.weeks.find((week) => week.id === editWeekId) : source.activeWeek
+    const owningGuide = source.guides.find((guide) => guide.id === (target?.guideId || target?.templateId)) ?? source.activeGuide
+    const hydrated = setupFromPreviousWeek(target, owningGuide)
+    if (editWeekId && target) hydrated.name = target.title.length <= WEEK_SETUP_LIMITS.name ? target.title : undefined
+    setSetup(hydrated); setInitialPattern(hydrated.pattern); setReplaceConfirmed(false)
     const latestEnd = source.weeks.map((week) => week.endDate).filter(isValidDate).sort().at(-1)
     const nextDate = source.starterIsPreview ? getTodayFormatted() : latestEnd ? getNextDayDate(latestEnd) : getTodayFormatted()
-    setStartDate(isValidDate(nextDate) && isValidDate(calculateInclusiveEndDate(nextDate)) ? nextDate : getTodayFormatted())
+    setStartDate(editWeekId && target ? target.startDate : isValidDate(nextDate) && isValidDate(calculateInclusiveEndDate(nextDate)) ? nextDate : getTodayFormatted())
     setError(null); setShareOpen(false); setAIConsent(false); setIsGenerating(false); setSuggestions(null); setAppliedCount(null)
     if (detailsRef.current) detailsRef.current.open = false
     if (demo.enabled) { setAvailable(false); return }
@@ -76,7 +87,7 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
       .then((result) => { if (!controller.signal.aborted) setAvailable(result?.available === true) })
       .catch(() => { if (!controller.signal.aborted) setAvailable(false) })
     return () => { controller.abort(); requestRef.current?.abort() }
-  }, [isOpen, activeWeek?.id, demo.enabled, starterIsPreview])
+  }, [isOpen, sourceWeekId, editWeekId, demo.enabled, starterIsPreview])
   useEffect(() => { if (error) errorRef.current?.focus() }, [error])
   useEffect(() => { if (shareOpen) shareRef.current?.focus() }, [shareOpen])
   useEffect(() => { if (suggestions) suggestionsRef.current?.focus() }, [suggestions])
@@ -91,12 +102,16 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (blocked || isGenerating) return
-    if (!validDates) {
+    if (patternChanged && !replaceConfirmed) {
+      setError(copy("Confirme a troca das atividades antes de salvar.", "Confirm the activity replacement before saving.")); return
+    }
+    if (!editing && !validDates) {
       if (detailsRef.current) detailsRef.current.open = true
       setError(copy("Escolha uma data válida que comporte os sete dias.", "Choose a valid start date that allows all seven days.")); return
     }
-    if (!isValidWeekSetup(setup) || !createPlannedWeek(setup, setup.name?.trim() || undefined, startDate)) {
-      setError(copy("Não foi possível adicionar a semana. Verifique os campos e o armazenamento.", "Could not add the week. Check the fields and storage.")); return
+    const saved = isValidWeekSetup(setup) && (editing ? updateWeekSetup(editWeekId, setup) : createPlannedWeek(setup, setup.name?.trim() || undefined, startDate))
+    if (!saved) {
+      setError(editing ? copy("Não foi possível salvar as escolhas. Verifique se a semana continua aberta e o armazenamento está disponível.", "Could not save the choices. Check that the week is still open and storage is available.") : copy("Não foi possível adicionar a semana. Verifique os campos e o armazenamento.", "Could not add the week. Check the fields and storage.")); return
     }
     close()
   }
@@ -165,10 +180,10 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
     theologyCosmovision: selectedSpiritualPreference(setup.spirituality, setup.theology, setup.theologyOther, locale),
   }
   const preferenceGroups: { group: WeekOptionGroup; label: string; placeholder: string }[] = [
-    { group: "burdens", label: copy("O Que Pesa no Dia a Dia", "Everyday Burdens"), placeholder: copy("Ex.: Estou lidando com muitas responsabilidades em casa.", "e.g. I am juggling many responsibilities at home.") },
-    { group: "discipline", label: copy("Hábitos e Disciplina", "Habits and Discipline"), placeholder: copy("Ex.: Quero reservar um tempo curto para cuidar das plantas.", "e.g. I want a short time to care for my plants.") },
-    { group: "psychology", label: copy("Preferência de Psicologia", "Psychology Preference"), placeholder: copy("Ex.: Prefiro uma abordagem baseada em autocompaixão.", "e.g. I prefer an approach based on self-compassion.") },
-    { group: "theology", label: copy("Preferência de Teologia ou Espiritualidade", "Theology or Spirituality Preference"), placeholder: copy("Ex.: Prefiro reflexões da minha tradição, sem citações.", "e.g. I prefer reflections from my tradition, without quotations.") },
+    { group: "burdens", label: getWeekOptionHeading("burdens", locale), placeholder: copy("Ex.: Estou lidando com muitas responsabilidades em casa.", "e.g. I am juggling many responsibilities at home.") },
+    { group: "discipline", label: getWeekOptionHeading("discipline", locale), placeholder: copy("Ex.: Quero reservar um tempo curto para cuidar das plantas.", "e.g. I want a short time to care for my plants.") },
+    { group: "psychology", label: getWeekOptionHeading("psychology", locale), placeholder: copy("Ex.: Prefiro uma abordagem baseada em autocompaixão.", "e.g. I prefer an approach based on self-compassion.") },
+    { group: "theology", label: getWeekOptionHeading("theology", locale), placeholder: copy("Ex.: Prefiro reflexões da minha tradição, sem citações.", "e.g. I prefer reflections from my tradition, without quotations.") },
   ]
   const preferenceChoices = (group: WeekOptionGroup, label: string, placeholder: string) => {
     const multiple = group === "burdens" || group === "discipline"
@@ -190,6 +205,7 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
         }} className="shrink-0 accent-primary" /><span className="min-w-0 break-words">{option.label}</span>
       </label>)}</div>
       {selected.includes("other") && <div><label htmlFor={`${prefix}-${otherField}`} className="mb-2 block text-sm font-medium">{copy("Outro:", "Other:")}</label><input id={`${prefix}-${otherField}`} value={setup[otherField] || ""} maxLength={1200} onChange={(event) => updateField(otherField, event.target.value)} placeholder={placeholder} className={inputClass} /></div>}
+      {group === "psychology" && <details className="rounded-xl border border-border p-3"><summary className="cursor-pointer text-xs text-primary">{copy("Sobre Estas Opções · Opcional", "About These Options · Optional")}</summary><p className="mt-3 text-xs leading-relaxed text-muted-foreground">{getPsychologyHelpIntro(locale)}</p><dl className="mt-3 space-y-3">{getPsychologyDescriptions(locale).map((option) => <div key={option.id}><dt className="text-xs font-medium">{option.label}</dt><dd className="mt-1 text-xs leading-relaxed text-muted-foreground">{option.description}</dd></div>)}</dl></details>}
     </fieldset>
   }
   const sharedFields = [
@@ -207,41 +223,43 @@ export function CreateWeekModal({ isOpen, onClose }: CreateModalProps) {
   return <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={`${prefix}-title`} className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-5">
     <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={close} aria-hidden="true" />
     <div className="relative flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl">
-      <header className="flex items-center justify-between gap-3 border-b border-border p-5"><div className="flex items-center gap-3"><Calendar className="size-5 text-primary" aria-hidden="true" /><h2 id={`${prefix}-title`} className="font-serif text-xl">{copy("Adicionar Semana", "Add Week")}</h2></div><button type="button" onClick={close} className="icon-button" aria-label={t.common.close}><X className="size-5" aria-hidden="true" /></button></header>
+      <header className="flex items-center justify-between gap-3 border-b border-border p-5"><div className="flex items-center gap-3"><Calendar className="size-5 text-primary" aria-hidden="true" /><h2 id={`${prefix}-title`} className="font-serif text-xl">{editing ? copy("Editar Escolhas da Semana", "Edit Week Choices") : copy("Adicionar Semana", "Add Week")}</h2></div><button type="button" onClick={close} className="icon-button" aria-label={t.common.close}><X className="size-5" aria-hidden="true" /></button></header>
       <form id={`${prefix}-form`} onSubmit={submit} noValidate className="min-h-0 overflow-y-auto p-5 sm:p-6">
         <div className="space-y-5">
           {error && <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-xl bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
-          {blocked && <p role="status" className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">{copy("Recupere o armazenamento antes de adicionar uma semana.", "Recover storage before adding a week.")}</p>}
+          {blocked && <p role="status" className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">{targetUnavailable ? copy("Esta semana não está disponível para edição. Seus registros foram preservados.", "This week is no longer available for editing. Your records were preserved.") : copy("Recupere o armazenamento antes de salvar uma semana.", "Recover storage before saving a week.")}</p>}
           <fieldset disabled={blocked || isGenerating} className="min-w-0 space-y-5">
             <div><label htmlFor={`${prefix}-expectation`} className="mb-2 block text-sm font-medium">{copy("O que você espera para esta semana?", "What do you expect for this week?")}</label><textarea id={`${prefix}-expectation`} rows={2} maxLength={WEEK_SETUP_LIMITS.expectation} value={setup.expectation} onChange={(event) => updateField("expectation", event.target.value)} placeholder={copy("Descansar mais e abrir um pequeno espaço para leitura.", "Rest more and make a little room for reading.")} className={inputClass} /><p className="mt-1 text-xs text-muted-foreground">{copy("Opcional. Você pode começar apenas escolhendo um ritmo.", "Optional. You can start by choosing a pattern.")}</p></div>
-            <fieldset className="min-w-0"><legend className="mb-2 text-sm font-medium">{copy("Escolha o Ritmo da Semana", "Choose a Week Pattern")}</legend><div className="grid grid-cols-2 gap-2">{presets.map((preset) => <label key={preset.id} className={`flex min-w-0 cursor-pointer gap-2 rounded-xl border p-3 ${setup.pattern === preset.id ? "border-primary bg-primary/5" : "border-border hover:bg-accent/50"}`}><input type="radio" name={`${prefix}-pattern`} value={preset.id} checked={setup.pattern === preset.id} onChange={() => editSetup((current) => ({ ...current, pattern: preset.id }))} className="mt-0.5 shrink-0 accent-primary" /><span className="min-w-0"><span className="block break-words text-sm font-medium">{preset.title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{preset.description}</span></span></label>)}</div><p className="mt-2 text-xs text-muted-foreground">{copy("Nada aumenta automaticamente. Descanso e uma semana vazia são escolhas válidas.", "Nothing increases automatically. Rest and a blank week are available choices.")}</p></fieldset>
+            <fieldset className="min-w-0"><legend className="mb-2 text-sm font-medium">{copy("Escolha o Ritmo da Semana", "Choose a Week Pattern")}</legend><div className="grid grid-cols-2 gap-2">{presets.map((preset) => <label key={preset.id} className={`flex min-w-0 cursor-pointer gap-2 rounded-xl border p-3 ${setup.pattern === preset.id ? "border-primary bg-primary/5" : "border-border hover:bg-accent/50"}`}><input type="radio" name={`${prefix}-pattern`} value={preset.id} checked={setup.pattern === preset.id} onChange={() => { setReplaceConfirmed(false); editSetup((current) => ({ ...current, pattern: preset.id })) }} className="mt-0.5 shrink-0 accent-primary" /><span className="min-w-0"><span className="block break-words text-sm font-medium">{preset.title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{preset.description}</span></span></label>)}</div><p className="mt-2 text-xs text-muted-foreground">{copy("Nada aumenta automaticamente. Descanso e uma semana vazia são escolhas válidas.", "Nothing increases automatically. Rest and a blank week are available choices.")}</p></fieldset>
+            {patternChanged && <div role="alert" className="space-y-3 rounded-xl border border-gold/40 bg-gold/5 p-4"><p className="text-sm leading-relaxed">{copy("Trocar o ritmo substitui as atividades desta semana por sugestões do novo ritmo e desmarca suas conclusões. As anotações e os campos personalizados permanecem; as semanas anteriores não mudam.", "Changing the pattern replaces this week's activities with the new preset and clears their completion checks. Your notes and custom note fields stay; earlier weeks remain unchanged.")}</p><label className="flex min-h-11 cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={replaceConfirmed} onChange={(event) => setReplaceConfirmed(event.target.checked)} className="mt-1 shrink-0 accent-primary" />{copy("Substituir as atividades desta semana e desmarcar suas conclusões.", "Replace this week's activities and clear their checks.")}</label></div>}
             <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer text-sm font-medium">{copy("Personalizar Esta Semana · Opcional", "Personalize This Week · Optional")}</summary><div className="mt-4 space-y-5">
-              <p className="text-xs text-muted-foreground">{copy("Escolha somente as preferências que deseja incluir.", "Choose only the preferences you want to include.")}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{copy("Escolha somente as preferências que deseja incluir. Elas ficam salvas como contexto; os ritmos prontos precisam de ajustes manuais para seus horários e necessidades. As sugestões do Gemini são uma etapa separada e opcional.", "Choose only the preferences you want to include. They are saved as context; preset activities need manual adjustments for your time and needs. Gemini suggestions are a separate optional step.")}</p>
               {preferenceGroups.filter((item) => item.group !== "theology").map((item) => preferenceChoices(item.group, item.label, item.placeholder))}
               <div className="space-y-4"><label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={setup.spirituality === true} onChange={(event) => { const checked = event.target.checked; editSetup((current) => ({ ...current, spirituality: checked })) }} className="accent-primary" />{copy("Incluir Espiritualidade", "Include Spirituality")}</label>
                 {setup.spirituality && preferenceChoices("theology", preferenceGroups[3].label, preferenceGroups[3].placeholder)}
               </div>
             </div></details>
             <details ref={detailsRef} className="rounded-xl border border-border p-4"><summary ref={optionsSummaryRef} className="cursor-pointer text-sm font-medium">{copy("Mais Opções · Opcional", "More Options · Optional")}</summary><div className="mt-4 space-y-4">
+              <p className="text-xs leading-relaxed text-muted-foreground">{copy("Estes campos ficam salvos como contexto. Revise manualmente os horários e as atividades do ritmo pronto; as sugestões do Gemini são separadas e opcionais.", "These fields are saved as context. Adjust preset times and activities manually; Gemini suggestions are separate and optional.")}</p>
               <div><label htmlFor={`${prefix}-name`} className="mb-2 block text-sm font-medium">{copy("Nome da Semana · Opcional", "Week Name · Optional")}</label><input id={`${prefix}-name`} maxLength={WEEK_SETUP_LIMITS.name} value={setup.name || ""} onChange={(event) => updateField("name", event.target.value)} placeholder={copy("Ex.: Uma Semana Com Mais Espaço", "e.g. A Week With More Room")} className={inputClass} /></div>
-              <div><label htmlFor={`${prefix}-date`} className="mb-2 block text-sm font-medium">{t.week.startDateLabel}</label><input id={`${prefix}-date`} type="date" required min="0100-01-01" max="9999-12-25" value={startDate} onChange={(event) => { setStartDate(event.target.value); setError(null) }} className={inputClass} />{validDates && <p className="mt-1 text-xs text-muted-foreground">{formatDateRangeLocale(startDate, endDate, locale)}</p>}</div>
+              <div><label htmlFor={`${prefix}-date`} className="mb-2 block text-sm font-medium">{t.week.startDateLabel}</label><input id={`${prefix}-date`} type="date" required disabled={editing} min="0100-01-01" max="9999-12-25" value={startDate} onChange={(event) => { setStartDate(event.target.value); setError(null) }} className={inputClass} />{validDates && <p className="mt-1 text-xs text-muted-foreground">{formatDateRangeLocale(startDate, endDate, locale)}</p>}{editing && <p className="mt-1 text-xs text-muted-foreground">{copy("Editar escolhas mantém as datas desta semana.", "Editing choices keeps this week's dates.")}</p>}</div>
               <fieldset><legend className="mb-2 text-sm font-medium">{copy("Tamanho dos Passos · Opcional", "Step Size · Optional")}</legend><div className="flex flex-wrap gap-2">{([
                 ["very_light", copy("Mais Leve", "Lighter")], ["light", copy("Leve", "Light")], ["moderate", copy("Mais Ativo", "More Active")],
               ] as const).map(([value, label]) => <label key={value} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm"><input type="radio" name={`${prefix}-intensity`} checked={(setup.intensity || "very_light") === value} onChange={() => editSetup((current) => ({ ...current, intensity: value }))} className="accent-primary" />{label}</label>)}</div><p className="mt-1 text-xs text-muted-foreground">{copy("Aplica-se às sugestões que usam uma duração. Você pode editar todas as atividades depois.", "Applies to suggestions that use a duration. You can edit every activity afterward.")}</p></fieldset>
               {optionalFields.map((field) => <div key={field.key}><label htmlFor={`${prefix}-${field.key}`} className="mb-2 block text-sm font-medium">{field.label} · {copy("Opcional", "Optional")}</label><textarea id={`${prefix}-${field.key}`} rows={2} maxLength={WEEK_SETUP_LIMITS[field.key]} value={setup[field.key] || ""} onChange={(event) => updateField(field.key, event.target.value)} placeholder={field.placeholder} className={inputClass} /></div>)}
             </div></details>
           </fieldset>
-          {activeWeek && <p className="text-xs leading-relaxed text-muted-foreground">{copy(`Suas escolhas e ${noteCount} valores de anotações salvas são copiados da semana atual. Manter o ritmo preserva suas atividades; outro ritmo troca as sugestões. As caixas de conclusão começam desmarcadas.`, `Your choices and ${noteCount} saved note values carry forward from the current week. Keeping its pattern preserves your activities; another pattern changes the suggestions. Completion boxes start unchecked.`)}</p>}
+          {sourceWeek && <p className="text-xs leading-relaxed text-muted-foreground">{editing ? copy(`${noteCount === 1 ? "Sua" : "Suas"} ${savedNotes} e os campos de anotações permanecem nesta semana. Manter o ritmo preserva as atividades e suas conclusões.`, `Your ${savedNotes} and note fields stay in this week. Keeping its pattern preserves activities and their checks.`) : copy(`Suas escolhas e ${savedNotes} são copiadas da semana selecionada. Manter o ritmo preserva suas atividades; outro ritmo troca as sugestões. As caixas de conclusão começam desmarcadas.`, `Your choices and ${savedNotes} carry forward from the selected week. Keeping its pattern preserves your activities; another pattern changes the suggestions. Completion boxes start unchecked.`)}</p>}
           <div className="space-y-3 border-t border-border pt-4">
             <button ref={geminiButtonRef} type="button" onClick={() => { setShareOpen((value) => !value); setAIConsent(false); setError(null) }} disabled={!setup.expectation.trim() || demo.enabled || blocked || isGenerating || available !== true || !accountCanUseAI} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-3 text-sm text-primary disabled:opacity-50"><Sparkles className="size-4" aria-hidden="true" />{copy("Sugestões Com Gemini · Opcional", "Gemini Suggestions · Optional")}</button>
             <p className="text-xs text-muted-foreground">{demo.enabled ? copy("Gemini fica desativado no demo. Os ritmos funcionam sem IA.", "Gemini is disabled in the demo. Week patterns work without AI.") : !accountCanUseAI ? copy("Gemini requer uma conta verificada. Você pode adicionar a semana sem IA.", "Gemini requires a verified account. You can add the week without AI.") : available === false ? copy("Gemini está indisponível. Os ritmos continuam disponíveis offline.", "Gemini is unavailable. Week patterns remain available offline.") : available === null ? copy("Verificando a disponibilidade do Gemini…", "Checking Gemini availability…") : !setup.expectation.trim() ? copy("Escreva uma expectativa para pedir sugestões.", "Enter an expectation to ask for suggestions.") : copy("Você revisa o que será enviado e escolhe se deseja aplicar as sugestões.", "Review what will be sent and choose whether to apply the suggestions.")}</p>
             {shareOpen && <div ref={shareRef} tabIndex={-1} className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4"><h3 className="text-sm font-medium">{copy("Revisar o Que Será Enviado", "Review What Will Be Sent")}</h3><dl className="space-y-2 text-xs">{sharedFields.map((field) => <div key={field.label}><dt className="font-medium">{field.label}</dt><dd className="mt-0.5 whitespace-pre-wrap break-words text-muted-foreground">{field.value}</dd></div>)}<div><dt className="font-medium">{copy("Tamanho dos Passos e Idioma", "Step Size and Language")}</dt><dd className="text-muted-foreground">{setup.intensity === "moderate" ? copy("Mais Ativo", "More Active") : setup.intensity === "light" ? copy("Leve", "Light") : copy("Mais Leve", "Lighter")} · {en ? "English" : "Português"}</dd></div></dl><p className="text-xs text-muted-foreground">{copy("Somente os campos acima vão para Gemini. Suas anotações diárias não são enviadas.", "Only the fields above are sent to Gemini. Your daily notes are excluded.")}</p><label className="flex items-start gap-2 text-xs leading-relaxed"><input type="checkbox" checked={aiConsent} disabled={isGenerating} onChange={(event) => setAIConsent(event.target.checked)} className="mt-0.5" />{copy("Concordo em enviar estes campos para receber sugestões opcionais.", "I agree to send these fields for optional suggestions.")}</label><button type="button" onClick={askGemini} disabled={!aiConsent || isGenerating || blocked} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50">{isGenerating ? <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}{isGenerating ? copy("Preparando…", "Preparing…") : copy("Pedir Sugestões", "Ask for Suggestions")}</button></div>}
-            {suggestions && <div ref={suggestionsRef} tabIndex={-1} className="space-y-3 rounded-xl border border-primary/20 p-4"><h3 className="text-sm font-medium">{copy("Revisar Sugestões", "Review Suggestions")}</h3><dl className="space-y-3 text-sm">{SUGGESTION_FIELDS.map((key) => <div key={key}><dt className="text-xs font-medium text-muted-foreground">{key === "name" ? copy("Nome da Semana", "Week Name") : key === "focus" ? copy("Expectativa", "Expectation") : key === "routineSchedule" ? copy("Tempo e Rotina", "Time and Routine") : optionalFields.find((field) => field.key === key)?.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{suggestions[key] || copy("Sem sugestão.", "No suggestion.")}</dd></div>)}</dl><p className="text-xs text-muted-foreground">{copy("Aplicar preenche somente campos vazios. O que você já escreveu é preservado; a semana ainda não é salva.", "Apply fills only empty fields. What you already wrote is preserved; the week is still unsaved.")}</p><div className="flex flex-wrap gap-2"><button type="button" onClick={applySuggestions} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3 text-sm text-primary-foreground"><Check className="size-4" aria-hidden="true" />{copy("Aplicar Sugestões", "Apply Suggestions")}</button><button type="button" onClick={() => { setSuggestions(null); geminiButtonRef.current?.focus() }} className="min-h-11 rounded-xl border border-border px-3 text-sm">{copy("Descartar", "Dismiss")}</button></div></div>}
-            {appliedCount !== null && <p role="status" className="text-xs text-muted-foreground">{copy(`${appliedCount} campos vazios preenchidos. Revise em Mais Opções antes de adicionar a semana.`, `${appliedCount} empty fields filled. Review More Options before adding the week.`)}</p>}
+            {suggestions && <div ref={suggestionsRef} tabIndex={-1} className="space-y-3 rounded-xl border border-primary/20 p-4"><h3 className="text-sm font-medium">{copy("Revisar Sugestões", "Review Suggestions")}</h3><dl className="space-y-3 text-sm">{SUGGESTION_FIELDS.map((key) => <div key={key}><dt className="text-xs font-medium text-muted-foreground">{key === "name" ? copy("Nome da Semana", "Week Name") : key === "focus" ? copy("Expectativa", "Expectation") : key === "routineSchedule" ? copy("Tempo e Rotina", "Time and Routine") : optionalFields.find((field) => field.key === key)?.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words">{suggestions[key] || copy("Sem sugestão.", "No suggestion.")}</dd></div>)}</dl><p className="text-xs text-muted-foreground">{copy("Aplicar preenche somente campos vazios. O que você já escreveu é preservado; suas alterações ainda não foram salvas.", "Apply fills only empty fields. What you already wrote is preserved; your changes are not saved yet.")}</p><div className="flex flex-wrap gap-2"><button type="button" onClick={applySuggestions} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3 text-sm text-primary-foreground"><Check className="size-4" aria-hidden="true" />{copy("Aplicar Sugestões", "Apply Suggestions")}</button><button type="button" onClick={() => { setSuggestions(null); geminiButtonRef.current?.focus() }} className="min-h-11 rounded-xl border border-border px-3 text-sm">{copy("Descartar", "Dismiss")}</button></div></div>}
+            {appliedCount !== null && <p role="status" className="text-xs text-muted-foreground">{copy(`${appliedCount} campos vazios preenchidos. Revise em Mais Opções antes de salvar.`, `${appliedCount} empty fields filled. Review More Options before saving.`)}</p>}
           </div>
         </div>
       </form>
-      <footer className="flex shrink-0 justify-end gap-2 border-t border-border p-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}><button type="button" onClick={close} className="min-h-11 rounded-xl border border-border px-4 text-sm">{t.common.cancel}</button><button type="submit" form={`${prefix}-form`} disabled={blocked || isGenerating} className="primary-button disabled:opacity-50"><Calendar className="size-4" aria-hidden="true" />{copy("Adicionar Semana", "Add Week")}</button></footer>
+      <footer className="flex shrink-0 justify-end gap-2 border-t border-border p-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}><button type="button" onClick={close} className="min-h-11 rounded-xl border border-border px-4 text-sm">{t.common.cancel}</button><button type="submit" form={`${prefix}-form`} disabled={blocked || isGenerating || patternChanged && !replaceConfirmed} className="primary-button disabled:opacity-50"><Calendar className="size-4" aria-hidden="true" />{editing ? copy("Salvar Escolhas da Semana", "Save Week Choices") : copy("Adicionar Semana", "Add Week")}</button></footer>
     </div>
   </div>
 }

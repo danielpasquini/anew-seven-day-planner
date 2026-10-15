@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react"
-import { AccessibilityInfo, Pressable, Text, View } from "react-native"
+import { AccessibilityInfo, Platform, Pressable, Text, View } from "react-native"
 import { Stack } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
@@ -12,7 +12,7 @@ import { NativeSoundProvider, useNativeSound } from "../sound"
 function SoundControl() {
   const { enabled, toggle } = useNativeSound()
   const c = useColors()
-  return <View style={{ alignItems: "flex-end", paddingHorizontal: 20, backgroundColor: c.background }}><Pressable accessibilityRole="switch" accessibilityLabel="Gentle sounds" accessibilityState={{ checked: enabled }} onPress={toggle} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}><Text style={{ color: c.primary, fontSize: 12 }}>{enabled ? "Gentle sounds · On" : "Gentle sounds · Off"}</Text></Pressable></View>
+  return <View style={{ alignItems: "flex-end", paddingHorizontal: 20, backgroundColor: c.background }}><Pressable accessibilityRole="switch" accessibilityLabel="Gentle sounds" accessibilityState={{ checked: enabled }} {...(Platform.OS === "web" ? { "aria-checked": enabled } : {})} onPress={toggle} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}><Text style={{ color: c.primary, fontSize: 12 }}>{enabled ? "Gentle sounds · On" : "Gentle sounds · Off"}</Text></Pressable></View>
 }
 function NativeCanvas() {
   const [reduced, setReduced] = useState(false)

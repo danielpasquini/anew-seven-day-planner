@@ -1991,6 +1991,112 @@ test("Week customization changes only the addressed open Week and retains field 
   assert.equal(JSON.stringify(fixture), before)
 })
 
+test("editing saved Week choices with the same pattern preserves renamed title, dates, activities, checks, and daily fields", () => {
+  const fixture = plannedWeekFixture()
+  const target = fixture.weeks[0]
+  target.title = "Fixture Renamed Through Week Details"
+  target.data.done["fixture-custom-note-check"] = true
+  target.aiReview = { verdict: "Fixture earlier review", summary: "Fixture retained reflection", whatWorked: [], difficulties: [], observedPatterns: [], nextWeekSuggestions: [], generatedAt: "2026-10-13T10:00:00.000Z", analysisVersion: 1 }
+  const before = JSON.stringify(fixture)
+  const setup = { ...weekPlanning.setupFromPreviousWeek(target, fixture.guides[0]), name: target.title,
+    expectation: "Fixture revised expectation", routine: "After 18:00", thingsToAvoid: "Leave Saturday open", burdens: ["other"], burdensOther: "Fixture changed preference" }
+  const revised = weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, setup, "2026-10-14T12:00:00.000Z", "en-US")
+  assert.ok(revised)
+  const saved = revised.weeks[0]
+  assert.equal(saved.title, target.title, "editing choices uses the current name, not stale setup metadata")
+  assert.deepEqual(saved.setup, setup)
+  assert.notEqual(saved.setup, setup)
+  assert.equal(saved.startDate, target.startDate)
+  assert.equal(saved.endDate, target.endDate)
+  assert.equal(saved.createdAt, target.createdAt)
+  assert.deepEqual(saved.programacao, target.programacao)
+  assert.deepEqual(saved.data, target.data)
+  assert.deepEqual(saved.progresso, target.progresso)
+  assert.deepEqual(saved.guideSnapshot.sections, target.guideSnapshot.sections)
+  assert.equal(saved.guideSnapshot.sections[0].blocks[1].fields[0].id, target.guideSnapshot.sections[0].blocks[1].fields[0].id)
+  assert.equal(saved.data.done["fixture-custom-note-check"], true)
+  assert.equal(saved.aiReview, target.aiReview)
+  assert.equal(saved.aiReviewOutdated, true)
+  assert.equal(revised.activeWeekId, fixture.activeWeekId)
+  assert.equal(revised.activeGuideId, fixture.activeGuideId)
+  assert.equal(revised.guides, fixture.guides)
+  assert.equal(revised.weeks[1], fixture.weeks[1])
+  assert.equal(backup.isValidBackup({ schemaVersion: 4, ...revised }), true)
+  assert.equal(JSON.stringify(fixture), before)
+  setup.burdens.push("worry")
+  assert.deepEqual(saved.setup.burdens, ["other"], "submitted choices remain detached")
+  assert.equal(JSON.stringify(fixture), before)
+})
+
+test("changing a saved Week pattern replaces only activity results while preserving custom notes, checks, and history", () => {
+  const fixture = plannedWeekFixture()
+  const target = fixture.weeks[0]
+  target.setup.spirituality = true; target.setup.theology = "christianity"
+  target.guideSnapshot.theologyEnabled = true; target.guideSnapshot.bibleVersion = "KJV"
+  target.guideSnapshot.sections[0].scripture = { verses: [{ ref: "Fixture reference", ara: "Fixture verse", nvt: "Fixture verse", kjv: "Fixture verse", niv: "Fixture verse" }], comentario: "Fixture commentary", oracao: "Fixture prayer" }
+  target.data.done["fixture-custom-note-check"] = true
+  target.data.done["fixture-another-note-check"] = false
+  target.completedAt = "2026-10-13T10:00:00.000Z"
+  target.completionSnapshot = { totalTasks: 7, completedTasks: 1, completionPercentage: 14, completedAt: target.completedAt,
+    taskResults: target.programacao.activities.map((activity) => ({ ...activity, done: Boolean(target.data.done[activity.id]), countsTowardCompletion: true })) }
+  target.aiReview = { verdict: "Fixture old review", summary: "Fixture earlier activities", whatWorked: [], difficulties: [], observedPatterns: [], nextWeekSuggestions: [], generatedAt: target.completedAt, analysisVersion: 1 }
+  const before = JSON.stringify(fixture)
+  const expectedSections = target.guideSnapshot.sections.map(({ scripture, ...section }) => section)
+  for (const pattern of ["rest", "routine", "balance", "focus", "momentum", "active", "blank"]) {
+    const setup = { ...clone(target.setup), pattern, spirituality: pattern !== "rest", theology: "other", theologyOther: "Fixture chosen tradition" }
+    const revised = weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, setup, "2026-10-14T12:00:00.000Z", "en-US")
+    assert.ok(revised, pattern)
+    const saved = revised.weeks[0]
+    assert.deepEqual(saved.data.text, target.data.text)
+    assert.deepEqual(saved.data.done, { "fixture-custom-note-check": true, "fixture-another-note-check": false })
+    assert.ok(saved.programacao.activities.every((activity) => !saved.data.done[activity.id]))
+    assert.deepEqual(saved.guideSnapshot.sections, expectedSections)
+    assert.equal(saved.guideSnapshot.bibleVersion, null)
+    assert.equal(saved.guideSnapshot.theologyEnabled, setup.spirituality)
+    assert.equal(saved.guideSnapshot.completionConfig.theologyReviewEnabled, setup.spirituality)
+    assert.equal(saved.programacao.activities.length, pattern === "blank" ? 0 : 7)
+    assert.deepEqual(saved.programacao.activities.map((activity) => activity.dayIndex), pattern === "blank" ? [] : [0, 1, 2, 3, 4, 5, 6])
+    assert.ok(saved.programacao.activities.every((activity) => activity.countsTowardCompletion === (pattern !== "rest")))
+    assert.deepEqual(saved.progresso, { total: pattern === "rest" || pattern === "blank" ? 0 : 7, concluidas: 0, percentual: 0 })
+    assert.equal(saved.startDate, target.startDate)
+    assert.equal(saved.endDate, target.endDate)
+    assert.equal(saved.completionSnapshot, null, "a reopened Week must not retain an obsolete completion snapshot")
+    assert.equal(saved.completedAt, null)
+    assert.equal(saved.aiReview, target.aiReview)
+    assert.equal(saved.aiReviewOutdated, true)
+    assert.equal(revised.guides, fixture.guides)
+    assert.equal(revised.weeks[1], fixture.weeks[1])
+    assert.equal(revised.activeWeekId, fixture.activeWeekId)
+    assert.equal(backup.isValidBackup({ schemaVersion: 4, ...revised }), true)
+    assert.equal(JSON.stringify(fixture), before)
+  }
+  const legacy = clone(fixture)
+  legacy.guides[0].sections = clone(target.guideSnapshot.sections)
+  delete legacy.weeks[0].guideSnapshot.sections
+  const legacyBefore = JSON.stringify(legacy)
+  const savedLegacy = weekPlanning.updateWeekSetupInWorkspace(legacy, target.id,
+    { ...target.setup, pattern: "rest", spirituality: false }, "2026-10-14T12:00:00.000Z", "en-US")
+  assert.ok(savedLegacy)
+  assert.deepEqual(savedLegacy.weeks[0].guideSnapshot.sections, expectedSections, "legacy section fallback is captured before disabling scripture")
+  assert.equal(JSON.stringify(legacy), legacyBefore)
+})
+
+test("saved Week choices reject absent, closed, or invalid targets and malformed workspace without mutation", () => {
+  const fixture = plannedWeekFixture()
+  const target = fixture.weeks[0]
+  const before = JSON.stringify(fixture)
+  const stamp = "2026-10-14T12:00:00.000Z"
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(fixture, "fixture-missing-week", target.setup, stamp), null)
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace({ ...fixture, weeks: [{ ...target, status: "completed" }, fixture.weeks[1]] }, target.id, target.setup, stamp), null)
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, { ...target.setup, burdens: ["worry", "worry"] }, stamp), null)
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, { ...target.setup, expectation: "x".repeat(1201) }, stamp), null)
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, target.setup, undefined), null)
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(fixture, target.id, target.setup, stamp, "invalid"), null)
+  const malformed = clone(fixture); malformed.weeks[1].data.text["fixture-invalid-note"] = 42
+  assert.equal(weekPlanning.updateWeekSetupInWorkspace(malformed, target.id, target.setup, stamp), null)
+  assert.equal(JSON.stringify(fixture), before)
+})
+
 test("Week setup backup validation accepts legacy records and rejects unknown, duplicated, forged, or oversized preferences", () => {
   const fixture = plannedWeekFixture()
   const setup = clone(fixture.weeks[0].setup)

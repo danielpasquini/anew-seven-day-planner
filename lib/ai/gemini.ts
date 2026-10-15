@@ -47,7 +47,7 @@ export async function generateStructuredJSON(options: {
   signal: AbortSignal
   maxOutputTokens: number
 }): Promise<unknown> {
-  if (!aiConfigured()) throw new AIRequestError(503, "AI is unavailable. You can still use the guide and free resources.", "AI_UNAVAILABLE")
+  if (!aiConfigured()) throw new AIRequestError(503, "AI is unavailable. You can still use the week planner and free resources.", "AI_UNAVAILABLE")
   const apiKey = process.env.GEMINI_API_KEY!.trim()
   const model = (process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL).trim()
   if (!/^gemini-[a-z0-9][a-z0-9.-]{1,80}$/.test(model)) {

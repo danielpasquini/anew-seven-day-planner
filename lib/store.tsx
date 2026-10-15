@@ -17,7 +17,7 @@ import { SyncEngine, type SyncStatus } from "@/lib/sync/sync-engine"
 import { isValidActivity, isValidBackup, isValidDate, isValidGuide } from "@/lib/backup-validation"
 import { createStarterGuide } from "@/lib/planner"
 import { createWeekFromGuide, reviseGuideInWorkspace, sectionsForWeek, type GuideUpdates } from "@/lib/guide-revision"
-import { createPlannedWeekInWorkspace, navigationForWeeks, updateWeekPlanInWorkspace, type WeekPlanUpdates } from "@/lib/week-planning"
+import { createPlannedWeekInWorkspace, navigationForWeeks, updateWeekPlanInWorkspace, updateWeekSetupInWorkspace, type WeekPlanUpdates } from "@/lib/week-planning"
 import type { WeekSetup } from "@/lib/week-setup"
 export type { WeekSetup } from "@/lib/week-setup"
 import { useAuth } from "@/lib/auth/client"
@@ -219,6 +219,7 @@ type StoreValue = {
   updateGuide: (guideId: string, updates: GuideUpdates) => boolean
   updateWeekPlan: (weekId: string, updates: WeekPlanUpdates) => boolean
   updateWeekSections: (weekId: string, sections: Section[]) => boolean
+  updateWeekSetup: (weekId: string, setup: WeekSetup) => boolean
   starterIsPreview: boolean
   useStarterWeek: () => void
   weeks: WeekInstance[]
@@ -849,6 +850,17 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
     return updateWeekPlan(weekId, { title: target.title, sections: nextSections, weeklyPlan: target.programacao.activities })
   }, [updateWeekPlan])
 
+  const updateWeekSetup = useCallback((weekId: string, setup: WeekSetup) => {
+    if (!canEdit || !workspaceActiveRef.current || storageBlockedRef.current
+      || deletionSuspendedRef.current || starterPreviewRef.current) return false
+    const next = updateWeekSetupInWorkspace({ guides: guidesRef.current, weeks: weeksRef.current,
+      activeGuideId, activeWeekId }, weekId, setup, new Date().toISOString(), locale)
+    if (!next) return false
+    setWeeks(next.weeks)
+    persist(next.weeks, activeWeekId, next.guides, activeGuideId)
+    return true
+  }, [canEdit, activeGuideId, activeWeekId, locale, persist])
+
   const selectWeek = useCallback(
     (id: string) => {
       const target = weeks.find((w) => w.id === id)
@@ -1067,7 +1079,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             status: "completed" as WeekStatus,
             completedAt: snapshot.completedAt,
             completionSnapshot: snapshot,
-            aiReviewOutdated: false,
+            aiReviewOutdated: w.aiReviewOutdated,
             updatedAt: nowIso,
           }
         })
@@ -1149,7 +1161,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             data: nextData,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(nextData, w.programacao.activities),
           }
         })
@@ -1189,7 +1201,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             data: nextData,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(nextData, w.programacao.activities),
           }
         })
@@ -1232,7 +1244,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -1281,7 +1293,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -1312,7 +1324,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(w.data, newActivities),
           }
         })
@@ -1359,7 +1371,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
             ...w,
             updatedAt: nowIso,
             programacao: updatedProgramacao,
-            aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+            aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
             progresso: computeProgress(w.data, currentActivities),
           }
         })
@@ -1389,7 +1401,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           data: { text: {}, done: {} },
           progresso: computeProgress({ text: {}, done: {} }, w.programacao.activities),
           updatedAt: new Date().toISOString(),
-          aiReviewOutdated: w.status === "completed" ? true : w.aiReviewOutdated,
+          aiReviewOutdated: Boolean(w.aiReview) || w.aiReviewOutdated,
         }
       })
       persist(nextWeeks, currentWeekId)
@@ -1538,7 +1550,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
     }
     const jsonStr = JSON.stringify(exportData, null, 2)
     try {
-      await saveTextFile(`Retomada_Week_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`, jsonStr)
+      await saveTextFile(`Anew_Week_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`, jsonStr)
     } catch {
       setAiError(locale === "en-US" ? "The file could not be saved or shared. Try again, and keep your guide open until you have a backup." : "Não foi possível salvar ou compartilhar o arquivo. Tente novamente e mantenha o guia aberto até ter um backup.")
     }
@@ -1564,7 +1576,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
         ? preservedBackupRef.current ?? storage.getItem(storageKey)
         : JSON.stringify(exportData, null, 2)
       if (jsonStr === null) throw new Error("NO_READABLE_BACKUP")
-      await saveTextFile(`Retomada_Backup_${new Date().toISOString().split("T")[0]}.json`, jsonStr)
+      await saveTextFile(`Anew_Backup_${new Date().toISOString().split("T")[0]}.json`, jsonStr)
     } catch {
       setAiError(locale === "en-US" ? "The backup could not be saved or shared. Try again, and keep this window open until the backup is saved." : "Não foi possível salvar ou compartilhar o backup. Tente novamente e mantenha esta janela aberta até salvar o arquivo.")
     }
@@ -1693,6 +1705,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       updateGuide,
       updateWeekPlan,
       updateWeekSections,
+      updateWeekSetup,
       starterIsPreview,
       useStarterWeek,
       weeks: sortedWeeks,
@@ -1752,6 +1765,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       updateGuide,
       updateWeekPlan,
       updateWeekSections,
+      updateWeekSetup,
       starterIsPreview,
       useStarterWeek,
       sortedWeeks,

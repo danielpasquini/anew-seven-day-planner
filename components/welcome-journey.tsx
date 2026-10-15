@@ -117,7 +117,7 @@ export function WelcomeJourney({ onComplete, onPreview, onSignIn, testMode = fal
               <button type="button" onClick={finalStep ? () => onComplete({ ...answers }) : () => moveTo(step + 1)} className={styles.primary}>{finalStep ? testMode ? "Start Test Workspace" : "Create my account" : "Continue"}<ArrowRight size={17} aria-hidden="true" /></button>
             </div>
             {!finalStep ? <button type="button" onClick={() => moveTo(step + 1)} className={styles.skipStep}>Skip this question</button> : <button type="button" onClick={() => onPreview({ ...answers })} className={styles.skipStep}>{testMode ? "Explore Test Workspace" : "Explore my week preview"}</button>}
-            <p className={styles.privacyNote}>{testMode ? "Your preferences prepare a week in memory for this test session. Restarting the test clears its examples. Nothing is sent to Firebase or AI." : "Your preferences stay in memory to prepare a guide locally. After signing up and acknowledging the notices, the derived week can be saved on this device for your account. Verify your email to use it. Answers aren’t stored separately or sent to Firebase or AI."}</p>
+            <p className={styles.privacyNote}>{testMode ? "Your preferences prepare a week in memory for this test session. Restarting the test clears its examples. Nothing is sent to Firebase or AI." : "Your preferences stay in memory to prepare a week locally. After signing up and acknowledging the notices, the derived week can be saved on this device for your account. Verify your email to use it. Answers aren’t stored separately or sent to Firebase or AI."}</p>
           </div></>}
         </section>
       </main>

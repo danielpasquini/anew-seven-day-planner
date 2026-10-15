@@ -159,6 +159,9 @@ export interface TranslationDictionary {
     descLabel: string
     countsTowardCompletion: string
     countsTowardCompletionDesc: string
+    completionHint: string
+    noCompletionTarget: string
+    activityOptions: string
     days: string[]
     emptyDay: string
     progressLabel: string
@@ -184,6 +187,7 @@ export interface TranslationDictionary {
     aiUnavailable: string
     aiUnavailableDesc: string
     formalCompletionTitle: string
+    actionCloseWeek: string
     formalCompletionDesc: string
     snapshotTitle: string
     reopenConfirm: string

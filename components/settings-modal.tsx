@@ -415,6 +415,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreat
                     {weekHistory.map((w) => {
                       const isActive = w.id === activeWeek?.id
                       const rangeStr = formatDateRangeLocale(w.startDate, w.endDate, locale)
+                      const countedActivities = w.programacao.activities.filter((activity) => activity.countsTowardCompletion !== false)
+                      const completedCount = countedActivities.filter((activity) => Boolean(w.data.done[activity.id])).length
 
                       return (
                         <div
@@ -433,7 +435,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreat
                               </span>
                               {isActive && (
                                 <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[0.65rem] font-bold">
-                                  {t.common.active}
+                                  {locale === "en-US" ? "Selected" : "Selecionada"}
                                 </span>
                               )}
                             </div>
@@ -442,7 +444,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreat
                             </p>
                             <div className="flex items-center gap-2 pt-1 flex-wrap">
                               <span className="text-[0.7rem] font-medium text-muted-foreground">
-                                {w.progresso.concluidas}/{w.progresso.total} {t.common.tasks}
+                                {countedActivities.length === 0 ? t.schedule.noCompletionTarget : `${completedCount}/${countedActivities.length} ${t.common.tasks}`}
                               </span>
                             </div>
                           </div>
@@ -454,7 +456,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreat
                                 onClick={() => selectWeek(w.id)}
                                 className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition touch-manipulation min-h-[2.25rem]"
                               >
-                                {t.common.activate}
+                                {t.common.open}
                               </button>
                             )}
 
@@ -632,9 +634,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = "semanas", onCreat
                               <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs font-mono font-bold shrink-0">
                                 {act.time}
                               </span>
-                              <span className="text-xs font-medium text-foreground truncate">
-                                {act.description}
-                              </span>
+                              <div className="min-w-0"><p className="truncate text-xs font-medium text-foreground">{act.description}</p>{act.countsTowardCompletion === false && <span className="mt-1 inline-block rounded bg-muted px-2 py-0.5 text-[0.65rem] text-muted-foreground">{t.schedule.infoBadge}</span>}</div>
                             </div>
 
                             <div className="flex items-center gap-1 shrink-0">

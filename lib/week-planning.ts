@@ -96,6 +96,46 @@ export function navigationForWeeks(weeks: WeekInstance[], activeWeekId: string |
   return { activeWeek: sorted[index] ?? null, previousWeek: sorted[index - 1] ?? null, nextWeek: sorted[index + 1] ?? null }
 }
 
+/** Revise one open Week's choices without changing its dates, notes, or reusable template. */
+export function updateWeekSetupInWorkspace(
+  workspace: Workspace, weekId: string, setup: WeekSetup, updatedAt: string, locale: Locale = "en-US",
+): Workspace | null {
+  if (!isValidWeekSetup(setup) || typeof updatedAt !== "string" || updatedAt.length > 100
+    || !["en-US", "pt-BR"].includes(locale) || !isValidBackup({ schemaVersion: 4, ...workspace })) return null
+  const week = workspace.weeks.find((item) => item.id === weekId)
+  const template = workspace.guides.find((guide) => guide.id === week?.guideId)
+  if (!week || !template || week.status !== "active" || !week.programacao?.activities) return null
+  const patternChanged = setupFromPreviousWeek(week, template).pattern !== setup.pattern
+  const activities = patternChanged ? buildPresetGuide(setup.pattern, locale, {
+    goal: setup.expectation, intensity: setup.intensity,
+  }, { id: `${week.id.slice(0, 100)}-pattern-${setup.pattern}`, createdAt: updatedAt }).weeklyPlan : week.programacao.activities
+  const previousActivityIds = new Set(week.programacao.activities.map((activity) => activity.id))
+  const data = patternChanged ? { ...week.data, done: Object.fromEntries(Object.entries(week.data.done)
+    .filter(([id]) => !previousActivityIds.has(id))) } : week.data
+  const counted = activities.filter((activity) => activity.countsTowardCompletion !== false)
+  const done = counted.filter((activity) => data.done[activity.id]).length
+  const snapshot = week.guideSnapshot ?? { id: template.id, title: template.title, version: template.version,
+    completionConfig: template.completionConfig, sections: template.sections, contentLocale: template.contentLocale,
+    theologyEnabled: template.theologyEnabled, bibleVersion: template.bibleVersion }
+  const revisedSnapshot = { ...copy(snapshot), sections: copy(snapshot.sections ?? template.sections), theologyEnabled: setup.spirituality === true,
+    completionConfig: { ...copy(snapshot.completionConfig), theologyReviewEnabled: setup.spirituality === true } }
+  if (!setup.spirituality || setup.theology !== "christianity") {
+    revisedSnapshot.sections = revisedSnapshot.sections?.map(({ scripture: _scripture, ...section }) => section)
+    revisedSnapshot.bibleVersion = null
+  }
+  const revised: WeekInstance = {
+    ...week, title: setup.name?.trim() || week.title, setup: copy(setup), updatedAt,
+    aiReviewOutdated: Boolean(week.aiReview) || week.aiReviewOutdated,
+    guideSnapshot: revisedSnapshot,
+    completionSnapshot: patternChanged ? null : week.completionSnapshot,
+    completedAt: patternChanged ? null : week.completedAt,
+    data, programacao: patternChanged ? { ...week.programacao, activities: copy(activities) } : week.programacao,
+    progresso: patternChanged ? { total: counted.length, concluidas: done, percentual: counted.length ? Math.round(done / counted.length * 100) : 0 } : week.progresso,
+  }
+  const next = { ...workspace, weeks: workspace.weeks.map((item) => item.id === weekId ? revised : item) }
+  return isValidBackup({ schemaVersion: 4, ...next }) ? next : null
+}
+
 /** Save customization to one open Week; shared/legacy templates are never revised. */
 export function updateWeekPlanInWorkspace(workspace: Workspace, weekId: string, updates: WeekPlanUpdates, updatedAt: string): Workspace | null {
   const week = workspace.weeks.find((item) => item.id === weekId)

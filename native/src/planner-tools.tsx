@@ -9,14 +9,30 @@ import { nativeAIConfigured, requestNativeGuideAI } from "./ai"
 import type { DraftSuggestions } from "../../lib/ai/schemas"
 import type { WeekSetup } from "../../lib/week-setup"
 import { setupFromPreviousWeek } from "../../lib/week-planning"
-import { getWeekOptions, selectedWeekPreference } from "../../lib/week-options"
+import { getPsychologyDescriptions, getPsychologyHelpIntro, getWeekOptionHeading, getWeekOptions, selectedWeekPreference } from "../../lib/week-options"
 import { calculateInclusiveEndDate, getNextDayDate, getTodayFormatted } from "../../lib/date-utils"
 import { isValidDate } from "../../lib/backup-validation"
 
 export function NativeWeekCreator({ onClose }: { onClose: () => void }) {
+  return <NativeWeekSetupForm onClose={onClose} />
+}
+
+export function NativeWeekChoicesEditor({ weekId, onClose }: { weekId: string; onClose: () => void }) {
+  return <NativeWeekSetupForm editWeekId={weekId} onClose={onClose} />
+}
+
+function NativeWeekSetupForm({ editWeekId, onClose }: { editWeekId?: string; onClose: () => void }) {
   const app = useNativeApp(), auth = useNativeAuth()
-  const [setup, setSetup] = useState<WeekSetup>(() => setupFromPreviousWeek(app.starterIsPreview ? undefined : app.activeWeek, app.starterIsPreview ? undefined : app.activeGuide))
+  const editing = editWeekId !== undefined
+  const targetWeek = editing ? app.weeks.find((week) => week.id === editWeekId) : undefined
+  const targetGuide = app.guides.find((guide) => guide.id === targetWeek?.guideId)
+  const [setup, setSetup] = useState<WeekSetup>(() => {
+    const previous = setupFromPreviousWeek(editing ? targetWeek : app.starterIsPreview ? undefined : app.activeWeek, editing ? targetGuide : app.starterIsPreview ? undefined : app.activeGuide)
+    return editing && targetWeek ? { ...previous, name: targetWeek.title.length <= 100 ? targetWeek.title : "" } : previous
+  })
+  const [confirmPatternChange, setConfirmPatternChange] = useState(false)
   const [personalize, setPersonalize] = useState(false), [extras, setExtras] = useState(false)
+  const [psychologyHelp, setPsychologyHelp] = useState(false)
   const latestEnd = app.starterIsPreview ? "" : app.weeks.reduce((latest, week) => week.endDate > latest ? week.endDate : latest, "")
   const [startDate, setStartDate] = useState(() => latestEnd ? getNextDayDate(latestEnd) : getTodayFormatted())
   const [error, setError] = useState<string | null>(null), [review, setReview] = useState<Record<string, string> | null>(null)
@@ -31,7 +47,7 @@ export function NativeWeekCreator({ onClose }: { onClose: () => void }) {
   const canUseAI = Boolean(nativeAIConfigured && auth.configured && auth.user?.emailVerified && auth.legalAccepted && app.canEdit && !app.demo)
   const update = (patch: Partial<WeekSetup>) => {
     request.current?.abort(); request.current = null; setPending(false)
-    setSetup((previous) => ({ ...previous, ...patch })); setReview(null); setAiConsent(false); setSuggestions(null); setError(null)
+    setSetup((previous) => ({ ...previous, ...patch })); setReview(null); setAiConsent(false); setSuggestions(null); setError(null); setConfirmPatternChange(false)
   }
   const toggleChoice = (group: "burdens" | "discipline", id: string) => {
     const selected = setup[group] ?? []
@@ -49,7 +65,7 @@ export function NativeWeekCreator({ onClose }: { onClose: () => void }) {
     theologyCosmovision: setup.spirituality ? selectedWeekPreference("theology", setup.theology, setup.theologyOther) || (setup.theology === "other" ? "Other (not specified)" : "No specific tradition") : "",
     theologyEnabled: setup.spirituality === true ? "yes" : "no",
   }
-  const labels: Record<string, string> = { name: "Week Name", focus: "What do you expect for this week?", routineSchedule: "Time and Routine", whatHelps: "What Helps", thingsToAvoid: "What to Avoid or Adapt", additionalNotes: "Other Preferences", intensity: "Step Size", contentLocale: "Language", instructions: "Pattern Instructions", currentDifficulties: "Everyday Burdens", priorityAreas: "Habits and Discipline", psychologyApproaches: "Psychological Approach Preference", theologyCosmovision: "Spiritual Preference", theologyEnabled: "Include Spiritual Content" }
+  const labels: Record<string, string> = { name: "Week Name", focus: "What do you expect for this week?", routineSchedule: "Time and Routine", whatHelps: "What Helps", thingsToAvoid: "What to Avoid or Adapt", additionalNotes: "Other Preferences", intensity: "Step Size", contentLocale: "Language", instructions: "Pattern Instructions", currentDifficulties: getWeekOptionHeading("burdens"), priorityAreas: getWeekOptionHeading("discipline"), psychologyApproaches: getWeekOptionHeading("psychology"), theologyCosmovision: getWeekOptionHeading("theology"), theologyEnabled: "Include Spiritual Content" }
   const askAI = async () => {
     if (!canUseAI || !aiConsent || !review || !review.focus.trim() || request.current) return
     const requestOwner = owner.current, controller = new AbortController()
@@ -76,52 +92,65 @@ export function NativeWeekCreator({ onClose }: { onClose: () => void }) {
     }))
     setSuggestions(null); setReview(null); setAiConsent(false); setExtras(true)
   }
-  return <Sheet visible title="Add Week" onClose={onClose}>
-    <Copy muted>{app.starterIsPreview ? "Choose your first week. This replaces the unsaved sample." : "This starts from your selected week's setup and daily notes. Checks start unchecked; each week keeps its own record."}</Copy>
-    <Copy small muted>Keeping the same pattern copies its activities. Choosing another pattern replaces the suggested activities.</Copy>
+  const editingUnavailable = editing && (!targetWeek || targetWeek.status !== "active" || app.starterIsPreview || !app.canEdit)
+  const patternChanges = editing && !!targetWeek && setupFromPreviousWeek(targetWeek, targetGuide).pattern !== setup.pattern
+  const saveChoices = () => {
+    if (!editWeekId || editingUnavailable) { setError("This week is no longer open for editing. Its records were preserved."); return }
+    if (app.updateWeekSetup(editWeekId, setup)) onClose()
+    else setError("The choices could not be saved. Check your preferences and access, then try again. Existing records were preserved.")
+  }
+  if (editingUnavailable) return <Sheet visible title="Edit Week Choices" onClose={onClose}><Copy accessibilityRole="alert">This week is no longer open for editing. Its records were preserved.</Copy><Button title="Close" onPress={onClose} /></Sheet>
+  return <Sheet visible title={editing ? "Edit Week Choices" : "Add Week"} onClose={onClose}>
+    <Copy muted>{editing ? "These choices apply to this week. Its dates and daily notes stay as they are; other weeks keep their own records." : app.starterIsPreview ? "Choose your first week. This replaces the unsaved sample." : "This starts from your selected week's setup and daily notes. Checks start unchecked; each week keeps its own record."}</Copy>
+    {editing && targetWeek && <Copy small muted>{targetWeek.title} · {targetWeek.startDate} – {targetWeek.endDate}. Use Edit Week Details to change dates.</Copy>}
+    <Copy small muted>{editing ? "Keeping the same pattern preserves your activities and their checkmarks. A different pattern replaces activities and resets their checkmarks after confirmation." : "Keeping the same pattern copies its activities. Choosing another pattern replaces the suggested activities."}</Copy>
     <View style={shared.stack}>{getPlannerPresets().map((item) => <Card key={item.id}><Pill title={item.title} selected={setup.pattern === item.id} onPress={() => update({ pattern: item.id })} /><Copy small muted>{item.description}</Copy></Card>)}</View>
     <Field label="What do you expect for this week?" value={setup.expectation} onChangeText={(expectation) => update({ expectation })} placeholder="e.g. Make room for a short rest after lunch." multiline maxLength={1200} />
     <Copy small muted>Optional. You can leave this blank and use any pattern without AI.</Copy>
+    <Copy small muted>Your expectation and interests are saved as context. Patterns provide ready-made activities. Edit activities and their times to fit your routine; optional Gemini assists with setup fields after your review.</Copy>
     <Button title={personalize ? "Hide Optional Personalization" : "Personalize This Week (Optional)"} variant="quiet" onPress={() => setPersonalize((value) => !value)} />
     {personalize && <Card>
-      <Copy strong>Everyday Burdens</Copy><Copy small muted>What has been weighing on you lately? Select any that fit, or leave them empty.</Copy>
+      <Copy strong>{getWeekOptionHeading("burdens")}</Copy><Copy small muted>Select any that fit, or leave them empty.</Copy>
       {getWeekOptions("burdens").map((option) => <CheckRow key={option.id} label={option.label} checked={(setup.burdens ?? []).includes(option.id)} onPress={() => toggleChoice("burdens", option.id)} />)}
-      {setup.burdens?.includes("other") && <Field label="Other: Everyday Burdens" value={setup.burdensOther ?? ""} onChangeText={(burdensOther) => update({ burdensOther })} placeholder="e.g. Too many commitments this week." maxLength={1200} />}
-      <Copy strong>Habits and Discipline</Copy><Copy small muted>What would you like to work on in your routine? Select any that fit.</Copy>
+      {setup.burdens?.includes("other") && <Field label="Other: Week Challenges" value={setup.burdensOther ?? ""} onChangeText={(burdensOther) => update({ burdensOther })} placeholder="e.g. Too many commitments this week." maxLength={1200} />}
+      <Copy strong>{getWeekOptionHeading("discipline")}</Copy><Copy small muted>What would you like to work on in your routine? Select any that fit.</Copy>
       {getWeekOptions("discipline").map((option) => <CheckRow key={option.id} label={option.label} checked={(setup.discipline ?? []).includes(option.id)} onPress={() => toggleChoice("discipline", option.id)} />)}
-      {setup.discipline?.includes("other") && <Field label="Other: Habits and Discipline" value={setup.disciplineOther ?? ""} onChangeText={(disciplineOther) => update({ disciplineOther })} placeholder="e.g. A pause before checking messages." maxLength={1200} />}
-      <Copy strong>Psychological Approach Preference</Copy><Copy small muted>Optional preferences for wording; these do not provide diagnosis or treatment.</Copy>
+      {setup.discipline?.includes("other") && <Field label={`Other: ${getWeekOptionHeading("discipline")}`} value={setup.disciplineOther ?? ""} onChangeText={(disciplineOther) => update({ disciplineOther })} placeholder="e.g. A pause before checking messages." maxLength={1200} />}
+      <Copy strong>{getWeekOptionHeading("psychology")}</Copy><Copy small muted>Optional interests. Keep No preference if you are unsure.</Copy>
+      <Button title={psychologyHelp ? "Hide Psychology Help" : "Help Me Choose (Optional)"} variant="quiet" onPress={() => setPsychologyHelp((value) => !value)} />
+      {psychologyHelp && <Card><Copy small muted>{getPsychologyHelpIntro()}</Copy>{getPsychologyDescriptions().map((option) => <View key={option.id}><Copy small strong>{option.label}</Copy><Copy small muted>{option.description}</Copy></View>)}</Card>}
       <View style={shared.wrap}>{getWeekOptions("psychology").map((option) => <Pill key={option.id} title={option.label} selected={(setup.psychology ?? "none") === option.id} onPress={() => update({ psychology: option.id })} />)}</View>
-      {setup.psychology === "other" && <Field label="Other: Psychological Approach" value={setup.psychologyOther ?? ""} onChangeText={(psychologyOther) => update({ psychologyOther })} placeholder="e.g. Practical reflection without a named approach." maxLength={1200} />}
+      {setup.psychology === "other" && <Field label="Other: Psychology Interest" value={setup.psychologyOther ?? ""} onChangeText={(psychologyOther) => update({ psychologyOther })} placeholder="e.g. Practical reflection without a named approach." maxLength={1200} />}
       <CheckRow label="Include Optional Spiritual Content" checked={setup.spirituality === true} onPress={() => update({ spirituality: !setup.spirituality })} />
-      {setup.spirituality && <><Copy strong>Theology / Spirituality</Copy><View style={shared.wrap}>{getWeekOptions("theology").map((option) => <Pill key={option.id} title={option.label} selected={(setup.theology ?? "none") === option.id} onPress={() => update({ theology: option.id })} />)}</View>
+      {setup.spirituality && <><Copy strong>{getWeekOptionHeading("theology")}</Copy><View style={shared.wrap}>{getWeekOptions("theology").map((option) => <Pill key={option.id} title={option.label} selected={(setup.theology ?? "none") === option.id} onPress={() => update({ theology: option.id })} />)}</View>
       {setup.theology === "other" && <Field label="Other: Spiritual Preference" value={setup.theologyOther ?? ""} onChangeText={(theologyOther) => update({ theologyOther })} placeholder="e.g. Space for reflection without scripture." maxLength={1200} />}</>}
     </Card>}
     <Button title={extras ? "Hide More Options" : "More Options"} variant="quiet" onPress={() => setExtras((value) => !value)} />
     {extras && <Card>
       <Field label="Week Name (Optional)" value={setup.name ?? ""} onChangeText={(name) => update({ name })} placeholder="e.g. A Little Room for Rest" maxLength={100} />
-      <Field label="Start Date · YYYY-MM-DD" value={startDate} onChangeText={setStartDate} placeholder="e.g. 2026-10-19" keyboardType="numbers-and-punctuation" maxLength={10} />
-      <Copy small muted>Seven days. The default starts after your latest week; you can choose another date.</Copy>
+      {editing && <Copy small muted>Leave the name blank to keep the current name.</Copy>}
+      {!editing && <><Field label="Start Date · YYYY-MM-DD" value={startDate} onChangeText={setStartDate} placeholder="e.g. 2026-10-19" keyboardType="numbers-and-punctuation" maxLength={10} />
+      <Copy small muted>Seven days. The default starts after your latest week; you can choose another date.</Copy></>}
       <Field label="Time and Routine (Optional)" value={setup.routine ?? ""} onChangeText={(routine) => update({ routine })} placeholder="e.g. Ten minutes after lunch, except Friday." multiline maxLength={1200} />
       <Field label="What Helps (Optional)" value={setup.whatHelps ?? ""} onChangeText={(whatHelps) => update({ whatHelps })} placeholder="e.g. A quiet place and a reminder." multiline maxLength={1200} />
       <Field label="What to Avoid or Adapt (Optional)" value={setup.thingsToAvoid ?? ""} onChangeText={(thingsToAvoid) => update({ thingsToAvoid })} placeholder="e.g. Skip long walks; offer seated alternatives." multiline maxLength={1200} />
       <Field label="Other Preferences (Optional)" value={setup.additionalNotes ?? ""} onChangeText={(additionalNotes) => update({ additionalNotes })} placeholder="e.g. Keep weekends free of scheduled steps." multiline maxLength={1200} />
       <Copy small strong>Step Size (Optional)</Copy><View style={shared.wrap}>{(["very_light", "light", "moderate"] as const).map((intensity) => <Pill key={intensity} title={intensity === "very_light" ? "Very Small" : intensity === "light" ? "Small" : "Moderate"} selected={(setup.intensity ?? "very_light") === intensity} onPress={() => update({ intensity })} />)}</View>
-      <Copy small muted>These preferences stay with this week. Local patterns use fixed suggestions; edit the activities to fit your preferences.</Copy>
+      <Copy small muted>These choices stay with this week. Add Week carries them into a separate record.</Copy>
     </Card>}
     <Button title="Optional Gemini Assist" variant="quiet" disabled={pending} onPress={() => { setReview(sharedFields); setAiConsent(false); setAiError(null); setSuggestions(null) }} />
     {review && <Card><Title small>Review Fields Before Sending</Title><Copy small muted>{app.demo ? "Example access never sends records to Gemini." : !canUseAI ? "Gemini requires a verified account and configured HTTPS service." : "Only the fields below are sent to Google Gemini. Daily notes and other weeks are excluded."}</Copy>
       {Object.entries(review).map(([key, value]) => <View key={key}><Copy small strong>{labels[key]}</Copy><Copy small muted>{key === "intensity" ? value === "very_light" ? "Very Small" : value === "light" ? "Small" : "Moderate" : key === "contentLocale" ? "English (US)" : value || "(Empty)"}</Copy></View>)}
-      {canUseAI && <><CheckRow label="Send These Reviewed Fields to Google Gemini" checked={aiConsent} onPress={() => setAiConsent((value) => !value)} disabled={pending} /><Button title={pending ? "Preparing Suggestions…" : "Suggest Setup Fields"} disabled={!aiConsent || pending || !review.focus.trim()} onPress={() => void askAI()} />{!review.focus.trim() && <Copy small muted>Add an expectation to request suggestions. Creating a week does not require it.</Copy>}</>}
+      {canUseAI && <><CheckRow label="Send These Reviewed Fields to Google Gemini" checked={aiConsent} onPress={() => setAiConsent((value) => !value)} disabled={pending} /><Button title={pending ? "Preparing Suggestions…" : "Suggest Setup Fields"} disabled={!aiConsent || pending || !review.focus.trim()} onPress={() => void askAI()} />{!review.focus.trim() && <Copy small muted>Add an expectation to request suggestions. Saving this week does not require it.</Copy>}</>}
       {aiError && <Copy accessibilityRole="alert">{aiError}</Copy>}
       {suggestions && <Card><Title small>Review Suggested Setup Fields</Title>{(["name", "focus", "routineSchedule", "whatHelps", "thingsToAvoid", "additionalNotes"] as const).map((key) => <View key={key}><Copy small strong>{labels[key]}</Copy><Copy small>{suggestions[key] || "(Empty)"}</Copy></View>)}<Copy small muted>Use Suggestions fills only empty setup fields. Your existing text stays as entered.</Copy><Button title="Use Suggestions in Empty Fields" onPress={applySuggestions} /><Button title="Keep My Fields" variant="quiet" onPress={() => setSuggestions(null)} /></Card>}
       <Button title="Close Gemini Review" variant="quiet" disabled={pending} onPress={() => { setReview(null); setAiConsent(false) }} />
     </Card>}
     {error && <Copy accessibilityRole="alert">{error}</Copy>}
-    <Button title="Add Week" disabled={pending} onPress={() => {
+    {editing ? <>{confirmPatternChange && <Card><Title small>Replace This Week&apos;s Activities?</Title><Copy>Saving a different pattern replaces this week&apos;s activities with the selected preset and clears their checkmarks. Your daily notes, note fields, dates, and earlier weeks stay unchanged.</Copy><Button title="Save With New Pattern" disabled={pending} onPress={saveChoices} /><Button title="Keep Editing" variant="quiet" onPress={() => setConfirmPatternChange(false)} /></Card>}<Button title="Save Week Choices" disabled={pending} onPress={() => patternChanges ? setConfirmPatternChange(true) : saveChoices()} /></> : <Button title="Add Week" disabled={pending} onPress={() => {
       if (!isValidDate(startDate) || !isValidDate(calculateInclusiveEndDate(startDate))) { setExtras(true); setError("Enter a real start date with seven valid calendar days as YYYY-MM-DD."); return }
       if (app.createPlannedWeek(setup, undefined, startDate)) onClose(); else setError("The week could not be added. Check your preferences and access, then try again.")
-    }} /><Button title="Cancel" variant="quiet" onPress={onClose} />
+    }} />}<Button title="Cancel" variant="quiet" onPress={onClose} />
   </Sheet>
 }
 

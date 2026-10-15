@@ -1,0 +1,163 @@
+Anew verification — October 13, 2026
+
+Scope: the sixteen approved implementation changes, saved working notes,
+Next production browser app, and Expo web rendering/native bundle exports.
+Revision: d3760298eb62d67c5b0544ceb51a08f6c046dee9 plus the uncommitted changes.
+No commit, cloud deployment, signed binary, or live account creation/deletion.
+
+Evidence root (E):
+C:/Users/Daniel/.codex/visualizations/2026/10/13/01a13567-76b9-7b93-acc4-ff80b29c2cca/app-review
+Paths below beginning implementation/ or user/ are relative to E.
+
+First complete checklist pass: 7 PASS, 3 FAIL.
+The failed checks are 5, 7 and 9 because required observations are missing.
+Following SKILL.md, work stops at this gate; no second complete pass or further
+application patches are represented as completed. Source reviews and earlier
+bounded implementation reruns are distinct from this final checklist pass.
+
+1. PASS — Type checks: web typecheck, native typecheck and native lint exit 0;
+   implementation/final/{web-type,native-type,native-lint}.log and *-exit.txt.
+2. PASS — Production compilation: Next build exits 0 and lists generated routes;
+   implementation/final/build.log and build-exit.txt. Latest Expo export exits 0
+   with one bundle each for Android, iOS and web in native/dist; normalized log
+   and attributed source/exit evidence are implementation/final/native-export.log
+   and native-export-evidence.json; original user/batch3-native-export-sound.log.
+3. PASS — Week patterns/inheritance: fresh core runner 100 passed, 0 failed,
+   0 skipped; implementation/final/core.log and core-exit.txt. Eight patterns
+   including Rest and Blank match lib/planner.ts:20–29. Named same/changed-pattern,
+   saved-choice, historical-field, Other and spirituality cases pass. Rendered
+   pattern selection and Weeks-only controls: implementation/batch2/web and
+   batch3 screenshots/snapshots; final/full-preview-mobile.png.
+4. PASS — Optional onboarding: the fresh ten-question, all-skipped and deterministic
+   side-effect cases pass. The side-effect fixture uses answered questions; it
+   is separate from the all-skipped factory case. A production browser session
+   actually skipped all ten questions and reached A Small Start; evidence:
+   implementation/final/full-ten-questions-skipped.json,
+   full-all-skipped-preview.txt/.png and full-welcome-mobile.png. Web and native
+   open-Week tours render six available steps attached to actual controls;
+   implementation/batch3/web-tour-choices.txt and native-tour-step3.txt/.png.
+5. FAIL — Preview/demo isolation: fresh feature-gate, reserved-credential,
+   memory-only, owner/reset and negative-side-effect fixtures pass, and separate
+   preview/demo/account screens were exercised. Complete runtime network/storage
+   traces were not captured. Enabled demo evidence belongs to the earlier
+   explicitly enabled implementation builds; the final browser build disables
+   demo access. Fixtures and screenshots do not prove zero runtime provider writes.
+6. PASS — AI authorization/consent: fresh AI suite 25 passed, 0 failed, 0 skipped;
+   implementation/final/ai.log and ai-exit.txt. Negative provider spies/stubs,
+   verified/nonanonymous identity, signed-token tampering, legal versions,
+   consent, English/Portuguese and timeout cases pass. The limiter's seventh
+   request produces 429 and Retry-After 60 without a provider request;
+   lib/ai/contracts.test.cjs:406–414. Live synthetic connectivity is separate:
+   gemini-first.log records three HTTP 503 responses; unchanged retry in
+   gemini-retry.log exits 0 with HTTP 200 and schema-valid JSON. No authenticated
+   account-to-Gemini UI result has been observed.
+7. FAIL — Record preservation/deletion: fresh invalid-backup, UID-switch,
+   failed-write/deletion, stale-result and history cases pass. Disposable demo
+   backup export/restore was exercised. Two authorized disposable live identities
+   and their live backup/restore/deletion comparisons were not available; no real
+   account, acknowledgements, credential or user record was created or deleted.
+8. PASS — Routes/English: production /, /termos, /privacidade and /delete-account
+   return HTTP 200; implementation/final/routes.json. Default welcome, preview,
+   sign-in, signup and changed dialogs/tours were captured in English/Anew.
+   Sources: lib/i18n/en-US.ts and the affected components. Final account/signup
+   snapshots show four unchecked acknowledgements and disabled Google sign-in;
+   full-account.txt, full-signup.txt and their desktop/mobile screenshots.
+9. FAIL — Rendered interaction: desktop and 390 × 844 evidence, no horizontal
+   overflow, keyboard containment/Escape/focus return, tour/launch skip and
+   sound off→on→off were observed. Web activity targets measure at least 44 × 44;
+   native options measure 44 × 48. OS reduced-motion behavior was not exercised.
+   Expo web rendering does not verify a physical iOS/Android device or audible
+   output. Evidence: implementation/batch3/web-mobile-measure.json,
+   native-modal-keyboard.json, native-checkbox-state.txt, native-sound-aria-state.json;
+   implementation/final/full-account-mobile-measure.json and
+   native-escape-observation.json/.txt/.png. Native Escape's first immediate AX
+   snapshot preceded the React update; the subsequent DOM observation confirms
+   zero dialogs and focus returned to the Activity Options opener.
+10. PASS — Traceability: exactly ten SKILL checks; skill-creator validation exits 0;
+    implementation/final-traceability-native.json and final-skill-validation.log.
+    Source counts are eight patterns, 25 resources and six native open-Week tour
+    targets. Five changed psychology/working-notes primary references load with
+    HTTP 200 and final URLs retained. README/PROJECT-STATE links and commands are
+    checked against local files, package scripts, installed Next guides, current
+    logs and the recorded historical setup evidence. Working notes contain eight
+    practices and retain the exact attachment path; notes-verification.json.
+    The final source/link manifest is implementation/final/source-traceability.json.
+
+Process cause of the failed checks
+
+5: The enabled demo was tested through UI and fixtures, but the available browser
+   control capabilities do not provide a complete runtime network/storage trace.
+   Omitting that observation from the test setup prevents a runtime isolation pass.
+7: Live identity/account prerequisites were not supplied. Local JWT/UID fixtures
+   are not two disposable verified Firebase users and cannot replace those flows.
+9: The browser test setup did not include an observed OS reduced-motion run.
+   Source inspection of reduced-motion support is not an interaction result.
+These are verification prerequisites; changing labels or screenshots cannot fix them.
+
+Current full local browser run
+
+URL: http://127.0.0.1:3100/
+The web demo flag is false in the build. No public API-base override is set.
+Four public Firebase fields are present and the project matches anew-58b4a.
+AI_ENABLED is true and the server-only key is present; no key value is recorded.
+The standalone server needs the root environment loaded explicitly because its
+generated server changes its working directory and has no copied .env.local.
+Corrected launch, after building and copying public/.next/static assets:
+rtk proxy node --env-file=.env.local -e "process.env.PORT='3100';process.env.HOSTNAME='127.0.0.1';require('./.next/standalone/server.js')"
+The corrected ai-status endpoint returns HTTP 200, available:true,
+authConfigured:true, accountRequired:true and consentRequired:true;
+implementation/final/ai-status-corrected-startup.json. An earlier launch without
+the environment file returned available:false; retained in routes.json.
+The latest fixed synthetic adapter request returned HTTP 200/valid JSON using
+gemini-3.1-flash-lite. The preceding 503×3 is retained, not assumed resolved forever.
+The app UI still requires the person's verified email, current acknowledgements
+and action-specific AI consent. A synthetic adapter pass does not authorize API
+endpoints and sent no account/demo records or daily notes.
+
+Selected fresh core evidence (exact test names in final/core.log)
+
+- onboarding offers exactly ten distinct optional questions with recognized choices
+- skipping every question creates a valid English guide with no clinical scoring or religious exercise
+- personalization is deterministic, has no network/storage side effects and never aliases defaults
+- demo remains unavailable without its explicit feature gate
+- matching public credentials never enables a disabled demo or creates an authentication identity
+- demo helpers never read real local storage, Firebase or a network endpoint
+- resetting or exiting a demo revokes pending persistence and cannot resurrect notes or favorites
+- native account storage rejects ambiguous owners and keeps A and B independently scoped
+- account deletion flushes actual queued edits before remote removal and only erases its own keys
+- switching to B while A Auth deletion is pending preserves B's session and storage
+- every local planner preset is a valid detached seven-day guide with optional secular steps
+- adding the same Week pattern copies exact daily notes and actual activities while resetting results
+- changing Week patterns rebuilds the selected voluntary plan without losing prior notes or custom sections
+- editing saved Week choices with the same pattern preserves renamed title, dates, activities, checks, and daily fields
+- changing a saved Week pattern replaces only activity results while preserving custom notes, checks, and history
+- saved Week choices reject absent, closed, or invalid targets and malformed workspace without mutation
+- only selected Week preferences and active Other fields appear as ordinary local notes
+- new Week spirituality requires opt-in and preserves authored notes when inherited scripture is disabled
+Legacy Guide names in test/schema identifiers are compatibility names, not UI flows.
+
+Additional regression evidence
+
+The imported synthetic-review-backup.json passed the real backup validator.
+Import into the disposable demo, close, reopen, change a completion check and
+close again retained the synthetic reflection and its stale-warning text;
+implementation/batch3/reopened-edited-closed-warning.txt/.png.
+No AI provider request was part of this regression. Native checkbox and sound
+switch web aria-checked values now reflect the same boolean as their visual state.
+Clinical/source peers reviewed optionality, context and documentation; their
+reviews do not represent clinical validation or human user research.
+
+Unverified observations
+
+- Complete preview/demo runtime network and storage traces: no trace captured.
+- Two disposable live-account UID/backup/deletion flows: no authorized identities.
+- Signup, email delivery/recovery and account-to-Gemini UI result: no human account run.
+- OS reduced-motion interaction: no observed run with that setting active.
+- Physical Android/iOS layout, keyboard/audio and installed backup behavior: no device.
+- Google sign-in, signed app binaries and store release: outside this local run.
+Historical cloud setup/audit reports remain historical; no new cloud audit occurred.
+
+Logging note: an auxiliary Python console printer initially raised a Windows
+encoding error after the core/AI/build child commands had already exited 0 and
+saved their full logs and exit files. The saved child-command results are the
+test evidence; the printer was corrected without repeating successful suites.

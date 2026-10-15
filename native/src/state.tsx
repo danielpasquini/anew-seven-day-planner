@@ -6,7 +6,7 @@ import { isValidActivity, isValidDate, isValidGuide } from "../../lib/backup-val
 import { calculateInclusiveEndDate, getTodayFormatted } from "../../lib/date-utils"
 import { buildPersonalizedGuide, hasOnboardingAnswers, type OnboardingAnswers } from "../../lib/onboarding"
 import { createStarterGuide } from "../../lib/planner"
-import { createPlannedWeekInWorkspace, setupFromPreviousWeek, updateWeekPlanInWorkspace } from "../../lib/week-planning"
+import { createPlannedWeekInWorkspace, setupFromPreviousWeek, updateWeekPlanInWorkspace, updateWeekSetupInWorkspace } from "../../lib/week-planning"
 import type { WeekSetup } from "../../lib/week-setup"
 import type { DemoScenario } from "../../lib/demo-data"
 import { blankWeek, clearNativeGuideDraft, copy, createBlankWorkspace, createNativeDemoWorkspace, NativeGuideDraftStorage, NativeWorkspaceStorage, newId, parseNativeWorkspace, readNativeGuideDraft, recalculateWeek, scopedPreviewGuide, visibleNativeWorkspace, workspaceStorageKey, type Activity, type NativeWeek, type NativeWorkspace } from "./workspace"
@@ -21,6 +21,7 @@ type NativeAppValue = {
   personalize(guide: GuideTemplate): void; completeOnboarding(answers: OnboardingAnswers): void
   starterIsPreview: boolean; useStarterWeek(): void; updateWeekSections(sections: Section[]): boolean
   createPlannedWeek(setup: WeekSetup, title?: string, startDate?: string): boolean
+  updateWeekSetup(weekId: string, setup: WeekSetup): boolean
   chooseGuide(id: string): void; chooseWeek(id: string): void; createWeek(title?: string, startDate?: string, guideId?: string): void
   updateWeek(id: string, patch: { title?: string; startDate?: string }): void; deleteWeek(id: string): void
   getText(id: string): string; setText(id: string, value: string): void; isDone(id: string): boolean; toggleDone(id: string): void
@@ -217,7 +218,9 @@ export function NativeAppProvider({ children }: { children: ReactNode }) {
     if (week?.status !== "active") return false
     const next = updateWeekPlanInWorkspace(current, week.id, { title: week.title, sections, weeklyPlan: week.programacao.activities }, new Date().toISOString())
     if (!next) { setError("Check section titles and field labels before saving."); return false }
-    const revised = { ...current, ...next }
+    const selected = next.weeks.find((item) => item.id === next.activeWeekId) ?? next.weeks.find((item) => item.id === current.activeWeekId)
+    if (!selected) { setError("The selected week could not be saved. Current records were preserved."); return false }
+    const revised: NativeWorkspace = { ...current, ...next, activeWeekId: selected.id, activeGuideId: selected.guideId }
     display(revised); save(revised)
     return true
   }
@@ -245,6 +248,17 @@ export function NativeAppProvider({ children }: { children: ReactNode }) {
     const current = workspaceRef.current, previous = current.weeks.find((week) => week.id === current.activeWeekId)
     createPlannedWeek(setupFromPreviousWeek(current.starterPreview ? undefined : previous,
       current.guides.find((guide) => guide.id === previous?.guideId)), title, startDate)
+  }
+  const updateWeekSetup = (weekId: string, setup: WeekSetup) => {
+    if (!canChange()) return false
+    const current = workspaceRef.current
+    if (current.starterPreview || current.weeks.find((item) => item.id === weekId)?.status !== "active") return false
+    const next = updateWeekSetupInWorkspace(current, weekId, setup, new Date().toISOString(), "en-US")
+    if (!next) { setError("This week's choices could not be saved. Current records were preserved."); return false }
+    const revised: NativeWorkspace = { ...current, guides: next.guides, weeks: next.weeks }
+    if (!parseNativeWorkspace(JSON.stringify(revised))) { setError("This week's choices could not be saved. Current records were preserved."); return false }
+    display(revised); save(revised); setError(null)
+    return true
   }
   const changeWeek = (id: string, change: (week: NativeWeek) => NativeWeek, activeOnly = false) => mutate((current) => ({ ...current, weeks: current.weeks.map((week) => week.id === id && (!activeOnly || week.status === "active") ? recalculateWeek({ ...change(week), updatedAt: new Date().toISOString(), aiReviewOutdated: Boolean(week.aiReview) }) : week) }))
   const updateWeek = (id: string, patch: { title?: string; startDate?: string }) => {
@@ -373,7 +387,7 @@ export function NativeAppProvider({ children }: { children: ReactNode }) {
   }
   const canReadCurrent = () => control.current.mode !== "account" || (ownsAuthenticatedWorkspace() && workspaceOwnerRef.current === authRef.current.user?.uid)
   const currentWeek = () => workspaceRef.current.weeks.find((week) => week.id === workspaceRef.current.activeWeekId) ?? workspaceRef.current.weeks[0]
-  return <NativeAppContext.Provider value={{ ready: ready && onboardingLoaded, demo, demoAvailable, demoScenario, demoJourneyPending, demoEpoch, canEdit: canChange() && !suspended, starterIsPreview: visibleWorkspace.starterPreview === true, useStarterWeek, updateWeekSections, createPlannedWeek, error, saveStatus, storageWarning, previewGuide: safePreviewGuide, guides: visibleWorkspace.guides, activeGuide, weeks: visibleWorkspace.weeks, activeWeek, theme: visibleWorkspace.theme, setTheme, onboardingSeen, personalize, completeOnboarding, chooseGuide, chooseWeek, createWeek, updateWeek, deleteWeek, getText: (id) => canReadCurrent() ? currentWeek().data.text[id] ?? "" : "", setText, isDone: (id) => canReadCurrent() && currentWeek().data.done[id] === true, toggleDone, addActivity, updateActivity, deleteActivity, completeWeek, reopenWeek, setWeekSpirituality, exportBackup, importBackup, resourceFavorites: visibleWorkspace.resourceFavorites, toggleResourceFavorite, startDemo, resetDemo, exitDemo, clearLocalData, clearError: () => setError(null), aiAvailable: Boolean(nativeAIConfigured && auth.configured && accountUid && !demo) }}>{children}</NativeAppContext.Provider>
+  return <NativeAppContext.Provider value={{ ready: ready && onboardingLoaded, demo, demoAvailable, demoScenario, demoJourneyPending, demoEpoch, canEdit: canChange() && !suspended, starterIsPreview: visibleWorkspace.starterPreview === true, useStarterWeek, updateWeekSections, createPlannedWeek, updateWeekSetup, error, saveStatus, storageWarning, previewGuide: safePreviewGuide, guides: visibleWorkspace.guides, activeGuide, weeks: visibleWorkspace.weeks, activeWeek, theme: visibleWorkspace.theme, setTheme, onboardingSeen, personalize, completeOnboarding, chooseGuide, chooseWeek, createWeek, updateWeek, deleteWeek, getText: (id) => canReadCurrent() ? currentWeek().data.text[id] ?? "" : "", setText, isDone: (id) => canReadCurrent() && currentWeek().data.done[id] === true, toggleDone, addActivity, updateActivity, deleteActivity, completeWeek, reopenWeek, setWeekSpirituality, exportBackup, importBackup, resourceFavorites: visibleWorkspace.resourceFavorites, toggleResourceFavorite, startDemo, resetDemo, exitDemo, clearLocalData, clearError: () => setError(null), aiAvailable: Boolean(nativeAIConfigured && auth.configured && accountUid && !demo) }}>{children}</NativeAppContext.Provider>
 }
 
 export function useNativeApp() {

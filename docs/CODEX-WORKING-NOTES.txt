@@ -1,0 +1,33 @@
+﻿Codex working notes for Anew
+Recorded: 2026-10-13 (America/Sao_Paulo)
+
+Source supplied by Daniel:
+C:/Users/Daniel/.codex/attachments/e973e970-4521-4741-86ba-0d985d169833/Pasted text.txt
+Title: Best practices — Getting started with Codex and proven practices for better results
+These are task-focused notes from the supplied text, not a change to Codex configuration.
+
+Practices to apply
+1. Start each coherent task with the goal, relevant files/context, constraints, and observable completion evidence.
+2. Plan complex work before editing. Keep the plan current as findings change. Describe the user behavior and preservation requirements before implementation details.
+3. Keep durable repository guidance short in AGENTS.md. Put a repeated, bounded verification workflow in SKILL.md; add rules in response to repeated mistakes rather than hypothetical edge cases.
+4. Give subagents bounded tasks and explicit file ownership. Avoid concurrent writers on the same files; use an isolated worktree when concurrent work truly needs overlapping files.
+5. Review each change and neighboring flows, then run the relevant checks. A successful build does not prove rendered behavior, account isolation, provider responses, or device behavior.
+6. Check the actual working directory, installed versions, available tools and permissions. Verify unstable product/API details in official documentation rather than assuming the pasted examples remain current.
+7. Add MCP connections only when they remove a specific manual loop. Add supporting scripts when they improve reliability. Stabilize a manual workflow before scheduling it.
+8. Keep one chat focused on one coherent outcome. Preserve accepted decisions and evidence across compaction; fork when the work actually branches.
+
+Application to the current approved work
+- Goal: implement all 16 individually approved app-review proposals.
+- Product constraints: Weeks only; copied setup and daily notes stay independent; completion resets for a new Week; previous records remain unchanged; personalization, spirituality and Gemini stay optional.
+- Scope: source changes and local checks. Live account records, deployment, provider use and Codex settings are separate actions.
+- Plan: work in batches of at most five coherent changes, with an integrated review before the next batch, following AGENTS.md.
+- Native tutorial wiring has a dedicated writer. Other agents provide bounded reference or test work. Root owns integration, shared source files and the evidence report.
+- Completion evidence: run the ten checks in SKILL.md, retain logs/screenshots/counts and identify unavailable observations.
+- Failure gate: if more than two checks fail on the first pass, stop before repairs and report the process cause. The previous audit triggered that gate; Daniel subsequently approved all proposed repairs.
+- Keep the complete rerun requirement in SKILL.md: if at most two checks fail on the first pass, fix those requirements and rerun every check. Run a second complete pass even with zero first-pass failures. Approval of repairs is not verification evidence.
+- Evidence gaps are prerequisites to resolve or report, never assumed passes. Current browser controls do not expose complete network/storage traces or reduced-motion emulation; physical native devices and disposable live account identities have not been exercised.
+
+Official planning reference opened:
+https://developers.openai.com/cookbook/articles/codex_exec_plans
+It supports keeping a written, maintained execution plan for complex work. The supplied article remains the source for these notes.
+

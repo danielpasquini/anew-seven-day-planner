@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Check, X } from "lucide-react"
+import { Plus, Trash2, Edit2, ArrowUp, ArrowDown, Check, X, MoreHorizontal } from "lucide-react"
 import { useStore, type ScheduleActivity } from "@/lib/store"
 import { getWeekDays } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
@@ -98,15 +98,6 @@ export function InteractiveScheduleBlock() {
                   </span>
                   <p className="text-xs font-medium text-muted-foreground">{day.formattedShort}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleOpenAdd(day.dayIndex)}
-                  title={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
-                  aria-label={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
-                  className="icon-button text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                </button>
               </div>
 
               {/* Day Activities List */}
@@ -133,14 +124,10 @@ export function InteractiveScheduleBlock() {
                             aria-pressed={done}
                             aria-label={done ? `${t.common.cancel}: ${act.description}` : `${t.common.done}: ${act.description}`}
                             onClick={() => toggleDone(act.id)}
-                            className={cn(
-                              "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border transition touch-manipulation",
-                              done
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-input hover:border-primary"
-                            )}
+                            className="flex size-11 shrink-0 items-center justify-center rounded-lg touch-manipulation hover:bg-primary/5"
                           >
-                            {done && <Check className="size-2.5" strokeWidth={3} aria-hidden="true" />}
+                            <span className={cn("flex size-7 items-center justify-center rounded-lg border transition",
+                              done ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{done && <Check className="size-2.5" strokeWidth={3} aria-hidden="true" />}</span>
                           </button>
 
                           <div className="min-w-0 flex-1">
@@ -160,36 +147,35 @@ export function InteractiveScheduleBlock() {
                           </div>
                         </div>
 
-                        {/* Actions toolbar */}
-                        <div className="mt-1.5 flex items-center justify-end gap-1 transition
-                          opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100
-                          [@media(hover:none)]:opacity-100">
-                          <button
+                        <details className="mt-1.5">
+                          <summary aria-label={`${t.schedule.activityOptions}: ${act.description}`} className="ml-auto flex min-h-11 w-fit min-w-11 cursor-pointer list-none items-center justify-center gap-1 rounded-lg px-2 text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+                            <MoreHorizontal className="size-4" aria-hidden="true" /><span className="text-[11px]">{t.schedule.activityOptions}</span>
+                          </summary>
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                          {index > 0 && <button
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "up")}
-                            disabled={index === 0}
                             title={t.schedule.orderUp}
                             aria-label={t.schedule.orderUp}
-                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
+                            className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground touch-manipulation"
                           >
                             <ArrowUp className="size-3" aria-hidden="true" />
-                          </button>
-                          <button
+                          </button>}
+                          {index < dayActs.length - 1 && <button
                             type="button"
                             onClick={() => moveScheduleActivity(act.id, "down")}
-                            disabled={index === dayActs.length - 1}
                             title={t.schedule.orderDown}
                             aria-label={t.schedule.orderDown}
-                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
+                            className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground touch-manipulation"
                           >
                             <ArrowDown className="size-3" aria-hidden="true" />
-                          </button>
+                          </button>}
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(act)}
                             title={t.schedule.editActivity}
                             aria-label={`${t.schedule.editActivity}: ${act.description}`}
-                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-primary touch-manipulation"
+                            className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-primary touch-manipulation"
                           >
                             <Edit2 className="size-3" aria-hidden="true" />
                           </button>
@@ -198,11 +184,12 @@ export function InteractiveScheduleBlock() {
                             onClick={() => deleteScheduleActivity(act.id)}
                             title={t.schedule.deleteActivity}
                             aria-label={`${t.schedule.deleteActivity}: ${act.description}`}
-                            className="p-1 min-w-[1.5rem] min-h-[1.5rem] flex items-center justify-center text-muted-foreground hover:text-destructive touch-manipulation"
+                            className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive touch-manipulation"
                           >
                             <Trash2 className="size-3" aria-hidden="true" />
                           </button>
-                        </div>
+                          </div>
+                        </details>
                       </div>
                     )
                   })
@@ -214,9 +201,9 @@ export function InteractiveScheduleBlock() {
                 type="button"
                 onClick={() => handleOpenAdd(day.dayIndex)}
                 aria-label={`${t.schedule.addActivity} (${day.dayNumberLabel})`}
-                className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-border/80 py-2 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition touch-manipulation"
+                className="mt-2 flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border/80 py-2 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition touch-manipulation"
               >
-                <Plus className="size-3" aria-hidden="true" /> {t.common.create}
+                <Plus className="size-3" aria-hidden="true" /> {t.schedule.addActivity}
               </button>
             </div>
           )
@@ -249,7 +236,7 @@ export function InteractiveScheduleBlock() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
                 aria-label={t.common.close}
               >
                 <X className="size-4" aria-hidden="true" />
@@ -304,17 +291,19 @@ export function InteractiveScheduleBlock() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="pt-1">
+                <label htmlFor="countsTowardCompletion" className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg text-sm font-medium text-foreground">
                 <input
                   type="checkbox"
                   id="countsTowardCompletion"
+                  aria-describedby="schedule-completion-hint"
                   checked={countsTowardCompletion}
                   onChange={(e) => setCountsTowardCompletion(e.target.checked)}
                   className="size-4 rounded border-input text-primary focus:ring-primary"
                 />
-                <label htmlFor="countsTowardCompletion" className="text-xs font-medium text-foreground cursor-pointer">
-                  {t.schedule.countsTowardCompletionDesc}
+                  {t.schedule.countsTowardCompletion}
                 </label>
+                <p id="schedule-completion-hint" className="mt-1 text-xs leading-relaxed text-muted-foreground">{t.schedule.countsTowardCompletionDesc}</p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

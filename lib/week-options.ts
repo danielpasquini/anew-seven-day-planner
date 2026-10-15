@@ -51,6 +51,40 @@ export function getWeekOptions(group: WeekOptionGroup, locale: Locale = "en-US")
   return WEEK_OPTIONS[group].map((option) => ({ id: option.id, label: locale === "pt-BR" ? option.pt : option.en }))
 }
 
+export function getWeekOptionHeading(group: WeekOptionGroup, locale: Locale = "en-US") {
+  const headings = {
+    burdens: { en: "What Could Make This Week Harder?", pt: "O que pode tornar esta semana mais difícil?" },
+    discipline: { en: "Habits and Routines", pt: "Hábitos e rotinas" },
+    psychology: { en: "Psychology Interests", pt: "Interesses em psicologia" },
+    theology: { en: "Spirituality or Theology", pt: "Espiritualidade ou teologia" },
+  }
+  return locale === "pt-BR" ? headings[group].pt : headings[group].en
+}
+
+export function getPsychologyHelpIntro(locale: Locale = "en-US") {
+  return locale === "pt-BR"
+    ? "São interesses opcionais. Escolher uma opção não seleciona uma terapia nem avalia sua saúde. Mantenha Sem preferência se não tiver certeza."
+    : "These are optional interests. Choosing one does not select therapy or assess your health. Keep No preference if you are unsure."
+}
+
+/** Educational descriptions, shown only when the user asks for help choosing. */
+export function getPsychologyDescriptions(locale: Locale = "en-US") {
+  const descriptions: Record<string, { en: string; pt: string }> = {
+    none: { en: "Leave this selected if you are unsure or have no particular approach in mind.", pt: "Mantenha esta opção se não tiver certeza ou não tiver uma abordagem específica em mente." },
+    "cognitive-behavioral": { en: "How thoughts, feelings, and actions influence one another.", pt: "Como pensamentos, sentimentos e ações influenciam uns aos outros." },
+    "acceptance-mindfulness": { en: "Making room for thoughts and feelings while noticing the present.", pt: "Abrir espaço para pensamentos e sentimentos enquanto observa o presente." },
+    humanistic: { en: "Your own perspective, choices, and capacity for growth.", pt: "Sua própria perspectiva, escolhas e capacidade de crescimento." },
+    psychodynamic: { en: "Patterns in feelings and relationships, including influences you may not notice.", pt: "Padrões nos sentimentos e relacionamentos, incluindo influências que você talvez não perceba." },
+    schema: { en: "Recurring patterns in beliefs, feelings, and relationships.", pt: "Padrões recorrentes nas crenças, sentimentos e relacionamentos." },
+    existential: { en: "Personal meaning, freedom, and choices.", pt: "Significado pessoal, liberdade e escolhas." },
+    integrative: { en: "Ideas drawn from more than one psychological approach.", pt: "Ideias de mais de uma abordagem psicológica." },
+    other: { en: "Another approach or style you would like to name.", pt: "Outra abordagem ou estilo que você gostaria de nomear." },
+  }
+  return getWeekOptions("psychology", locale).map((option) => ({ ...option,
+    description: locale === "pt-BR" ? descriptions[option.id].pt : descriptions[option.id].en,
+  }))
+}
+
 /** Only explicitly selected preferences become profile text. Other text stays inert until selected. */
 export function selectedWeekPreference(group: WeekOptionGroup, selected: string | string[] | undefined, other = "", locale: Locale = "en-US"): string {
   const ids = new Set(Array.isArray(selected) ? selected : selected ? [selected] : [])
