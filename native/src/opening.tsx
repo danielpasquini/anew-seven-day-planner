@@ -49,12 +49,12 @@ function NativeOpeningSequence({ firstVisit, onDone }: { firstVisit?: boolean; o
   }, [firstVisit])
   useEffect(() => {
     if (!ready) return
-    const length = reduced ? 100 : first ? 9200 : 1400
+    const length = reduced ? 100 : first ? 1200 : 800
     if (first && !reduced) {
-      Animated.timing(stem, { toValue: 1, duration: 8100, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE_DRIVER }).start()
+      Animated.timing(stem, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: NATIVE_DRIVER }).start()
       growth.forEach((value, index) => Animated.sequence([
-        Animated.delay(leaves[index].delay),
-        Animated.timing(value, { toValue: 1, duration: Math.max(500, 1550 - index * 170), easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE_DRIVER }),
+        Animated.delay(Math.min(leaves[index].delay, 600)),
+        Animated.timing(value, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: NATIVE_DRIVER }),
       ]).start())
     }
     const timer = setTimeout(() => {

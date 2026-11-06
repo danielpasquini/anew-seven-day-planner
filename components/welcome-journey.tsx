@@ -8,7 +8,6 @@ import { createStarterGuide } from "@/lib/planner"
 import { titleCase } from "@/lib/title-case"
 import { isNativeApp, openExternalUrl } from "@/lib/platform"
 import { BrandMark } from "@/components/brand-mark"
-import { SoundControl } from "@/components/sound-control"
 import styles from "./welcome-journey.module.css"
 
 const STEP_ICONS = [Sprout, Wind, Sun, HeartHandshake, Compass, Clock3, NotebookPen, Sunrise, LayoutList, Footprints, Leaf]
@@ -122,7 +121,7 @@ export function WelcomeJourney({ onComplete, onPreview, onSignIn, testMode = fal
         </section>
       </main>
 
-      <footer className={styles.footer}><span>Seven days. Small steps. Your pace.</span><SoundControl label />{onSignIn && <button type="button" onClick={onSignIn}>{testMode ? "Open Returning-User Test" : "I already have an account"} <ArrowRight size={14} aria-hidden="true" /></button>}</footer>
+      <footer className={styles.footer}><span>Seven days. Small steps. Your pace.</span>{onSignIn && <button type="button" onClick={onSignIn}>{testMode ? "Open Returning-User Test" : "I already have an account"} <ArrowRight size={14} aria-hidden="true" /></button>}</footer>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react"
 import { Volume2, VolumeX } from "lucide-react"
 import { gentleFeedback, initializeSounds, quietOnBackground, setGentleSound, soundSnapshot, subscribeSounds, unlockGentleSound } from "@/lib/sounds"
 import { useDemo } from "@/lib/demo"
+import { AudioEngine } from "@/lib/audio/AudioEngine"
 
 export function GentleSoundEvents() {
   const demo = useDemo()
@@ -13,7 +14,11 @@ export function GentleSoundEvents() {
       if (!event.isTrusted || !(event.target instanceof Element)) return
       if (event.target.closest("[data-sound-control]")) return
       unlockGentleSound()
-      if (event.target.closest("button, a[href]")) gentleFeedback()
+      void AudioEngine.unlock()
+      if (event.target.closest("button, a[href]")) {
+        gentleFeedback()
+        AudioEngine.sfx?.playTap()
+      }
     }
     const visibility = () => { if (document.hidden) quietOnBackground() }
     document.addEventListener("click", interact)

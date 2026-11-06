@@ -9,14 +9,24 @@ import { useDemo } from "@/lib/demo"
 
 export function WeekReviewCard() {
   const demo = useDemo()
-  const { activeWeek, reopenWeek, generateAIReview, isGeneratingAI, aiError, locale, t } = useStore()
+  const { activeWeek, reopenWeek, generateAIReview, isGeneratingAI, aiError, locale, t, tier } = useStore()
   const [showOptions, setShowOptions] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [aiConsent, setAIConsent] = useState(false)
   const [includeTexts, setIncludeTexts] = useState(false)
   const copy = (pt: string, en: string) => locale === "en-US" ? en : pt
-  useEffect(() => { setShowOptions(false); setAIConsent(false); setIncludeTexts(false) }, [activeWeek?.id])
+  useEffect(() => { setShowOptions(false); setAIConsent(false); setIncludeTexts(false); setShowUpgradeModal(false) }, [activeWeek?.id])
   if (!activeWeek || activeWeek.status !== "completed") return null
   const review = activeWeek.aiReview
+  const handleStartReflection = () => {
+    if (tier !== "premium") {
+      setShowUpgradeModal(true)
+      return
+    }
+    setAIConsent(false)
+    setIncludeTexts(false)
+    setShowOptions(true)
+  }
   const generate = async () => {
     if (!aiConsent || isGeneratingAI) return
     await generateAIReview(activeWeek.id, true, includeTexts)
@@ -39,7 +49,28 @@ export function WeekReviewCard() {
     {activeWeek.aiReviewOutdated && <p role="status" className="rounded-xl bg-muted p-3 text-xs leading-relaxed text-muted-foreground">{copy("Seus registros mudaram depois desta reflexão. O texto abaixo corresponde a uma versão anterior da semana.", "Your week changed after this reflection. The text below reflects an earlier version of your week.")}</p>}
     {review && <div className="space-y-5 border-t border-border pt-5"><div><p className="eyebrow flex items-center gap-2 text-primary"><Sparkles className="size-3.5" aria-hidden="true" />{copy("REFLEXÃO GERADA POR IA", "AI-GENERATED REFLECTION")}</p><p className="mt-3 text-sm leading-relaxed">{review.summary || review.verdict}</p><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{copy("Esta é uma sugestão automática, pode errar e não avalia sua saúde, personalidade ou valor. Fique apenas com o que fizer sentido.", "This is an automated suggestion. It can be wrong and does not assess your health, personality or worth. Keep only what makes sense.")}</p></div><div className="grid gap-3 sm:grid-cols-2">{groups.filter((group) => group.items?.length).map((group) => <div key={group.title} className="rounded-xl border border-border p-4"><h4 className="mb-3 text-sm font-medium">{titleCase(group.title)}</h4><ul className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-muted-foreground">{group.items.map((item, index) => <li key={index}>{item}</li>)}</ul></div>)}</div></div>}
     {aiError && <p role="alert" className="flex items-start gap-2 rounded-xl border border-destructive/20 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{aiError}</p>}
-    {demo.enabled ? <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">AI reflections require configured account and server services. This demo never sends its records to an AI provider.</p> : isGeneratingAI ? <p role="status" aria-live="polite" className="flex items-center gap-3 rounded-xl bg-muted p-4 text-sm"><Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />{copy("Preparando uma reflexão opcional para você revisar…", "Preparing an optional reflection for you to review…")}</p> : !showOptions ? <button type="button" onClick={() => { setAIConsent(false); setIncludeTexts(false); setShowOptions(true) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium text-primary hover:bg-accent"><Sparkles className="size-4" aria-hidden="true" />{review ? copy("Criar outra reflexão com IA · opcional", "Create another AI reflection · optional") : copy("Refletir com IA · opcional", "Reflect with AI · optional")}</button> : <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+    {showUpgradeModal ? (
+      <div className="space-y-4 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+        <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+          <Sparkles className="size-4" aria-hidden="true" />
+          <span>Anew Premium</span>
+        </div>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {locale === "en-US"
+            ? "AI reflection and weekly synthesis with Google Gemini is an Anew Premium feature. Upgrade your account or sign in to experience AI assistance."
+            : "A reflexão semanal e síntese com Google Gemini é um recurso exclusivo do Anew Premium. Faça login ou upgrade para desbloquear a inteligência artificial."}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setShowUpgradeModal(false)} className="min-h-11 rounded-xl px-4 text-sm hover:bg-accent">
+            {t.common.cancel}
+          </button>
+          <a href="/test?scenario=premium" className="primary-button inline-flex items-center gap-1.5">
+            <Sparkles className="size-4" aria-hidden="true" />
+            <span>{locale === "en-US" ? "Explore Premium" : "Conhecer Premium"}</span>
+          </a>
+        </div>
+      </div>
+    ) : demo.enabled ? <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">AI reflections require configured account and server services. This demo never sends its records to an AI provider.</p> : isGeneratingAI ? <p role="status" aria-live="polite" className="flex items-center gap-3 rounded-xl bg-muted p-4 text-sm"><Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />{copy("Preparando uma reflexão opcional para você revisar…", "Preparing an optional reflection for you to review…")}</p> : !showOptions ? <button type="button" onClick={handleStartReflection} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium text-primary hover:bg-accent"><Sparkles className="size-4" aria-hidden="true" />{review ? copy("Criar outra reflexão com IA · opcional", "Create another AI reflection · optional") : copy("Refletir com IA · opcional", "Reflect with AI · optional")}</button> : <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
       <h4 className="flex items-center gap-2 text-sm font-semibold text-primary"><ShieldCheck className="size-4" aria-hidden="true" />{titleCase(copy("Escolha o que enviar", "Choose what to send"))}</h4>
       <p className="text-sm leading-relaxed text-muted-foreground">{copy("Ao gerar, o servidor deste app envia ao Google Gemini o cronograma, as atividades e suas marcações. Por padrão, suas anotações pessoais ficam fora desse envio. A IA pode errar e não substitui cuidado profissional.", "When you generate, this app’s server sends the schedule, activities and your checkmarks to Google Gemini. Personal notes are excluded by default. AI can be wrong and does not replace professional care.")}</p>
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3"><input type="checkbox" checked={includeTexts} onChange={(event) => { setIncludeTexts(event.target.checked); setAIConsent(false) }} className="mt-1 size-4 shrink-0" /><span className="text-sm leading-relaxed">{copy("Também quero enviar as anotações desta semana. Elas podem conter informações sensíveis de saúde ou crenças.", "I also want to send this week’s notes. They may contain sensitive health or belief information.")}</span></label>

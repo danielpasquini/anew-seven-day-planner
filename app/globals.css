@@ -455,6 +455,19 @@
   .primary-button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; gap: 10px; padding: 11px 20px; border-radius: 12px; color: var(--primary-foreground); background: var(--primary); font-size: 0.875rem; font-weight: 550; transition: opacity 150ms ease; }
   .primary-button:hover { opacity: 0.9; }
   .dashboard-card { min-width: 0; border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; background: var(--card); }
+
+  @keyframes aurora {
+    from {
+      background-position: 50% 50%, 50% 50%;
+    }
+    to {
+      background-position: 350% 50%, 350% 50%;
+    }
+  }
+
+  .animate-aurora {
+    animation: aurora 60s linear infinite;
+  }
   .sidebar-action { display: flex; min-height: 44px; width: 100%; align-items: center; gap: 12px; border-radius: 12px; padding: 10px 12px; text-align: left; font-size: 0.8125rem; color: var(--muted-foreground); }
   .sidebar-action:hover { background: var(--accent); color: var(--primary); }
   .skip-link { position: fixed; z-index: 100; top: 12px; left: 12px; transform: translateY(-150%); border-radius: 10px; background: var(--primary); color: var(--primary-foreground); padding: 12px 18px; }

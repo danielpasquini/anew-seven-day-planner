@@ -14,13 +14,16 @@ import { calculateInclusiveEndDate, getNextDayDate, getTodayFormatted, getWeekDa
 import { getDictionary, type TranslationDictionary } from "@/lib/i18n"
 import { BibleProvider, type BibleVersion } from "@/lib/bible/bible-provider"
 import { SyncEngine, type SyncStatus } from "@/lib/sync/sync-engine"
+import { FirestoreCloudProvider } from "@/lib/sync/firestore-provider"
 import { isValidActivity, isValidBackup, isValidDate, isValidGuide } from "@/lib/backup-validation"
 import { createStarterGuide } from "@/lib/planner"
 import { createWeekFromGuide, reviseGuideInWorkspace, sectionsForWeek, type GuideUpdates } from "@/lib/guide-revision"
+import { buildWeekMarkdown, buildWeekExportJSON } from "@/lib/export-utils"
 import { createPlannedWeekInWorkspace, navigationForWeeks, updateWeekPlanInWorkspace, updateWeekSetupInWorkspace, type WeekPlanUpdates } from "@/lib/week-planning"
 import type { WeekSetup } from "@/lib/week-setup"
 export type { WeekSetup } from "@/lib/week-setup"
 import { useAuth } from "@/lib/auth/client"
+import { AudioEngine } from "@/lib/audio/AudioEngine"
 import { getAuthToken } from "@/lib/auth/firebase-client"
 import { apiUrl } from "@/lib/api-url"
 import { saveTextFile } from "@/lib/platform"
@@ -261,10 +264,14 @@ type StoreValue = {
   setLocale: (locale: Locale) => void
   bibleVersion: BibleVersion
   setBibleVersion: (version: BibleVersion) => void
+  toggleSpirituality: (enabled?: boolean) => void
   t: TranslationDictionary
   saveStatus: SyncStatus
   storageWarning: string | null
   storageReadOnly: boolean
+  isGuest: boolean
+  isPremium: boolean
+  tier: "guest" | "free" | "premium"
   retrySync: () => void
   exportToMarkdown: () => void
   exportWeekJSON: () => void
@@ -283,8 +290,20 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
   const demoMode = demo.enabled && demo.demoStorage !== null && demo.storageKey !== null
   const { status: authStatus, user: authUser, legalAccepted } = useAuth()
   const user = demoMode ? null : authUser
-  const fullAccess = demoMode || (authStatus === "authenticated" && user?.emailVerified === true && legalAccepted)
-  const storageKey = demoMode ? demo.storageKey! : user && fullAccess ? `${STORAGE_KEY_V2}:${user.uid}` : "guia-preview"
+  const isGuest = !demoMode && (!user || authStatus !== "authenticated")
+  const fullAccess = demoMode || isGuest || (authStatus === "authenticated" && user?.emailVerified === true && legalAccepted)
+  const isPremium = !demoMode && (
+    (typeof window !== "undefined" && window.localStorage?.getItem("anew-user-tier") === "premium") ||
+    Boolean(user && (user.email === "tester@anew.local" || user.email?.includes("premium")))
+  )
+  const tier: "guest" | "free" | "premium" = demoMode
+    ? "guest"
+    : isGuest
+      ? "guest"
+      : isPremium
+        ? "premium"
+        : "free"
+  const storageKey = demoMode ? demo.storageKey! : user ? `${STORAGE_KEY_V2}:${user.uid}` : `${STORAGE_KEY_V2}:guest`
   const storage = useRef<Pick<Storage, "getItem" | "setItem" | "removeItem">>(demoMode ? demo.demoStorage! : {
     getItem: (key) => localStorage.getItem(key),
     setItem: (key, value) => localStorage.setItem(key, value),
@@ -385,6 +404,15 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       syncEngine.dispose()
     }
   }, [syncEngine, user?.uid, demoMode])
+
+  useEffect(() => {
+    if (!demoMode && user?.uid && fullAccess) {
+      syncEngine.setUserId(user.uid)
+      syncEngine.setCloudProvider(new FirestoreCloudProvider())
+    } else {
+      syncEngine.setUserId(null)
+    }
+  }, [syncEngine, user?.uid, fullAccess, demoMode])
 
   // Load theme, palette, locale and bibleVersion on client side
   useEffect(() => {
@@ -750,6 +778,28 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
     } : template
   }, [guides, activeGuideId, activeWeek])
 
+  const toggleSpirituality = useCallback((enabled?: boolean) => {
+    const nextVal = enabled !== undefined ? enabled : !activeGuide.theologyEnabled
+    const updatedGuides = guides.map((g) => {
+      if (g.id === activeGuideId || g.id === activeWeek?.guideId) {
+        return { ...g, theologyEnabled: nextVal }
+      }
+      return g
+    })
+    const updatedWeeks = weeks.map((w) => {
+      if (w.id === activeWeek?.id) {
+        return {
+          ...w,
+          guideSnapshot: w.guideSnapshot ? { ...w.guideSnapshot, theologyEnabled: nextVal } : undefined,
+        }
+      }
+      return w
+    })
+    setGuides(updatedGuides)
+    setWeeks(updatedWeeks)
+    persist(updatedWeeks, activeWeekId, updatedGuides, activeGuideId)
+  }, [activeGuide.theologyEnabled, activeGuideId, activeWeek, activeWeekId, guides, persist, setGuides, setWeeks, weeks])
+
   const useStarterWeek = useCallback(() => {
     if (!canEdit || !starterPreviewRef.current) return
     starterPreviewRef.current = false
@@ -991,6 +1041,12 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
         setAiError("AI is unavailable in demo mode. No information is sent to a provider.")
         return
       }
+      if (isGuest || tier !== "premium") {
+        setAiError(locale === "en-US"
+          ? "AI reflections are part of Anew Premium. Sign in or upgrade to unlock."
+          : "Reflexões com IA fazem parte do Anew Premium. Faça login ou upgrade para desbloquear.")
+        return
+      }
       if (!fullAccess) return
       if (!aiConsent) {
         setAiError(locale === "en-US" ? "Your permission is required before sending data to Google Gemini." : "Seu consentimento é necessário antes de enviar dados ao Google Gemini.")
@@ -1063,7 +1119,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
         setIsGeneratingAI(false)
       }
     },
-    [weeks, activeWeekId, activeGuide, locale, isGeneratingAI, fullAccess, demoMode, persist, createSnapshot]
+    [weeks, activeWeekId, activeGuide, locale, isGeneratingAI, fullAccess, demoMode, persist, createSnapshot, isGuest, tier]
   )
 
   // Complete Week Handler
@@ -1190,6 +1246,13 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           if (w.id !== currentWeekId) return w
           const currentVal = Boolean(w.data.done[taskId])
           const nextVal = value ?? !currentVal
+          if (typeof window !== "undefined") {
+            AudioEngine.ensureContext()
+            void AudioEngine.unlock().then(() => {
+              if (nextVal) AudioEngine.sfx?.playComplete()
+              else AudioEngine.sfx?.playTap()
+            })
+          }
           const nextData = {
             ...w.data,
             done: {
@@ -1412,90 +1475,9 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
   const exportToMarkdown = useCallback(async () => {
     if (!activeWeek) return
     setAiError(null)
-    const guideTitle = activeWeek.guideSnapshot?.title || activeGuide.title
-    const rangeStr = formatDateRangeLocale(activeWeek.startDate, activeWeek.endDate, locale)
     const isEn = locale === "en-US"
-
-    let md = `# ${guideTitle}\n`
-    md += `## ${activeWeek.title} (${rangeStr})\n\n`
-    md += `**${isEn ? "Status" : "Status"}:** ${activeWeek.status === "completed" ? (isEn ? "Completed" : "Concluída") : (isEn ? "In progress" : "Em andamento")}\n`
-    if (activeWeek.completedAt) {
-      md += `**${isEn ? "Completed on" : "Concluída em"}:** ${new Date(activeWeek.completedAt).toLocaleString(locale)}\n`
-    }
-    md += `**${isEn ? "Created on" : "Data de Criação"}:** ${new Date(activeWeek.createdAt).toLocaleDateString(locale)}\n`
-    md += `**${isEn ? "Week Progress" : "Progresso da Semana"}:** ${activeWeek.progresso.concluidas} ${isEn ? "of" : "de"} ${activeWeek.progresso.total} ${isEn ? "tasks completed" : "tarefas concluídas"} (${activeWeek.progresso.percentual}%)\n\n`
-
-    if (activeWeek.aiReview) {
-      md += `---\n\n`
-      md += `### ${isEn ? "Optional AI reflection" : "Reflexão opcional com IA"}\n\n`
-      md += `**${isEn ? "Reflection" : "Reflexão"}:** ${activeWeek.aiReview.verdict}\n\n`
-      md += `**${isEn ? "Summary" : "Resumo"}:** ${activeWeek.aiReview.summary}\n\n`
-      md += `**${isEn ? "What worked well" : "O que funcionou bem"}:\n`
-      activeWeek.aiReview.whatWorked.forEach((item) => (md += `- ${item}\n`))
-      md += `\n**${isEn ? "Observed difficulties" : "Dificuldades observadas"}:\n`
-      activeWeek.aiReview.difficulties.forEach((item) => (md += `- ${item}\n`))
-      md += `\n**${isEn ? "Identified patterns" : "Padrões observados"}:\n`
-      activeWeek.aiReview.observedPatterns.forEach((item) => (md += `- ${item}\n`))
-      md += `\n**${isEn ? "Suggestions for next cycle" : "Sugestões para a próxima semana"}:\n`
-      activeWeek.aiReview.nextWeekSuggestions.forEach((item) => (md += `- ${item}\n`))
-      md += `\n`
-    }
-
-    md += `---\n\n`
-    md += `### ${isEn ? "Weekly Activity Schedule" : "Programação Semanal de Atividades"}\n\n`
-    const days = getWeekDays(activeWeek.startDate, locale)
-    const activities = activeWeek.programacao?.activities || []
-
-    days.forEach((day) => {
-      md += `#### ${day.dayNumberLabel} (${day.formattedShort})\n`
-      const dayActs = activities
-        .filter((a) => a.dayIndex === day.dayIndex)
-        .sort((a, b) => a.order - b.order || a.time.localeCompare(b.time))
-
-      if (dayActs.length === 0) {
-        md += `*${isEn ? "No activities scheduled" : "Sem atividades cadastradas"}*\n\n`
-      } else {
-        dayActs.forEach((act) => {
-          const done = activeWeek.data.done[act.id] ? "[X]" : "[ ]"
-          const extra = act.countsTowardCompletion === false ? (isEn ? " (Informational)" : " (Informativa)") : ""
-          md += `- ${done} **${act.time}** — ${act.description}${extra}\n`
-        })
-        md += `\n`
-      }
-    })
-
-    md += `---\n\n`
-    md += `### ${isEn ? "Guide Records & Responses" : "Registros e Respostas do Guia"}\n\n`
-    sectionsForWeek(activeWeek, activeGuide).forEach((s) => {
-      md += `#### ${isEn ? "Section" : "Seção"} ${s.number}: ${s.title}\n\n`
-      s.blocks.forEach((block) => {
-        if (block.type === "fields" && block.fields) {
-          if (block.title) md += `##### ${block.title}\n\n`
-          block.fields.forEach((field) => {
-            if (field.kind === "static") return
-            const val = activeWeek.data.text[field.id] || (isEn ? "*Not filled*" : "*Não preenchido*")
-            const label = field.label || field.id
-            md += `**${label}:**\n> ${val.replace(/\n/g, "\n> ")}\n\n`
-          })
-        } else if (block.type === "ladder" && block.rows) {
-          block.rows.forEach((row) => {
-            const nota = activeWeek.data.text[`${row.id}-nota`] || "-"
-            const feito = activeWeek.data.done[row.id] ? "[X]" : "[ ]"
-            md += `- ${feito} **${row.label}** — ${isEn ? "Target difficulty" : "Nota prevista"}: ${nota}\n`
-          })
-          md += `\n`
-        }
-      })
-    })
-
-    // Scripture Attribution notice if applicable
-    if (activeGuide.theologyEnabled) {
-      const notice = BibleProvider.getAttributionNotice(bibleVersion, locale)
-      if (notice) {
-        md += `---\n\n*${notice}*\n`
-      }
-    }
-
+    const guideTitle = activeWeek.guideSnapshot?.title || activeGuide.title
+    const md = buildWeekMarkdown(activeWeek, activeGuide, locale, bibleVersion)
     try {
       await saveTextFile(`${guideTitle.replace(/\s+/g, "_")}_${activeWeek.title.replace(/\s+/g, "_")}.md`, md, "text/markdown")
     } catch {
@@ -1506,49 +1488,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
   const exportWeekJSON = useCallback(async () => {
     if (!activeWeek) return
     setAiError(null)
-    const activities = activeWeek.programacao?.activities || []
-    const taskResults = activities.map((a) => ({
-      id: a.id,
-      dayIndex: a.dayIndex,
-      time: a.time,
-      description: a.description,
-      countsTowardCompletion: a.countsTowardCompletion !== false,
-      done: Boolean(activeWeek.data.done[a.id]),
-    }))
-    const exportData = {
-      exportVersion: 1,
-      schemaVersion: 4,
-      exportedAt: new Date().toISOString(),
-      guide: {
-        id: activeWeek.guideId || activeGuide.id,
-        title: activeWeek.guideSnapshot?.title || activeGuide.title,
-        version: activeWeek.guideVersion || activeGuide.version,
-      },
-      metadata: {
-        weekId: activeWeek.id,
-        title: activeWeek.title,
-        startDate: activeWeek.startDate,
-        endDate: activeWeek.endDate,
-        status: activeWeek.status,
-        createdAt: activeWeek.createdAt,
-        updatedAt: activeWeek.updatedAt,
-        completedAt: activeWeek.completedAt ?? null,
-      },
-      schedule: activities.map((a) => ({
-        id: a.id,
-        dayIndex: a.dayIndex,
-        time: a.time,
-        description: a.description,
-        order: a.order,
-        countsTowardCompletion: a.countsTowardCompletion !== false,
-      })),
-      responses: activeWeek.data.text,
-      tasks: taskResults,
-      progress: activeWeek.progresso,
-      completionSnapshot: activeWeek.completionSnapshot ?? null,
-      aiReview: activeWeek.aiReview ?? null,
-    }
-    const jsonStr = JSON.stringify(exportData, null, 2)
+    const jsonStr = buildWeekExportJSON(activeWeek, activeGuide)
     try {
       await saveTextFile(`Anew_Week_${activeWeek.title.replace(/\s+/g, "_")}_${activeWeek.startDate}.json`, jsonStr)
     } catch {
@@ -1743,10 +1683,14 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       setLocale,
       bibleVersion,
       setBibleVersion,
+      toggleSpirituality,
       t,
       saveStatus,
       storageWarning,
       storageReadOnly,
+      isGuest,
+      isPremium,
+      tier,
       retrySync,
       exportToMarkdown,
       exportWeekJSON,
@@ -1802,6 +1746,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       setLocale,
       bibleVersion,
       setBibleVersion,
+      toggleSpirituality,
       t,
       saveStatus,
       retrySync,
@@ -1814,6 +1759,9 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
       canEdit,
       storageWarning,
       storageReadOnly,
+      isGuest,
+      isPremium,
+      tier,
     ]
   )
 

@@ -10,8 +10,8 @@ import { buildPersonalizedGuide, hasOnboardingAnswers, type OnboardingAnswers } 
 import { createStarterGuide } from "@/lib/planner"
 import type { GuideTemplate } from "@/lib/guide-data"
 import { stageOnboardingGuide } from "@/lib/onboarding-draft"
-import { SoundControl } from "@/components/sound-control"
 import { beginOpeningSound, stopOpeningSound } from "@/lib/sounds"
+import { AudioEngine } from "@/lib/audio/AudioEngine"
 import { useDemo } from "@/lib/demo"
 import "./launch-experience.css"
 
@@ -85,20 +85,22 @@ export function LaunchExperience() {
   }, [personalGuide, user, status, legalAccepted, demo.enabled])
   useEffect(() => {
     if (phase !== "opening" || !loaded) return
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) beginOpeningSound()
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      beginOpeningSound()
+      AudioEngine.playOpening(firstVisit)
+    }
     return stopOpeningSound
-  }, [phase, loaded])
+  }, [phase, loaded, firstVisit])
   useEffect(() => {
     if (!loaded || phase !== "opening") return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    const timer = window.setTimeout(() => setPhase(introPending && !user ? "journey" : "app"), reduced ? 100 : firstVisit ? 9200 : 1400)
+    const timer = window.setTimeout(() => setPhase(introPending && !user ? "journey" : "app"), reduced ? 100 : firstVisit ? 1200 : 800)
     return () => window.clearTimeout(timer)
   }, [loaded, firstVisit, introPending, user, phase])
   if (phase === "opening") return <main className="anew-opening" tabIndex={-1} aria-label="Anew is opening">
     <div className="anew-opening-paper">{loaded && (firstVisit ? <GrowingBranch /> : <BrandMark paper className="anew-returning-leaf size-28 text-primary" />)}<span className="anew-paper-corner" aria-hidden="true" /></div>
     <h1 className="mt-7 font-serif text-5xl font-medium tracking-[-.045em] text-primary">Anew<span className="text-gold">.</span></h1>
     <p className="mt-3 text-sm text-muted-foreground">Seven days. Small steps. Your pace.</p>
-    <div className="mt-5"><SoundControl label /></div>
     <button className="mt-8 min-h-11 rounded-xl px-4 text-xs text-muted-foreground hover:bg-primary/5" onClick={() => setPhase(introPending && !user ? "journey" : "app")}>Skip animation</button>
   </main>
   if (phase === "journey") return <WelcomeJourney testMode={demo.enabled} onComplete={(answers) => enter("register", answers)} onPreview={(answers) => enter("preview", answers)} onSignIn={() => demo.enabled ? demo.startDemo() : enter("login")} />

@@ -1,0 +1,128 @@
+================================================================================
+GUIA DE RETOMADA / ANEW — GUIA DE TESTES DE CENÁRIOS (PORTA DEDICADA)
+================================================================================
+
+Este documento descreve os comandos e URLs dedicadas para testar cada perfil de uso
+do aplicativo de forma isolada, reproduzível e com a INTERFACE 100% LIMPA (sem banners
+ou barras de teste poluindo a tela de produção).
+
+O app funciona de maneira idêntica no WebApp, iOS e Android.
+
+--------------------------------------------------------------------------------
+COMO INICIAR O SERVIDOR DE DESENVOLVIMENTO
+--------------------------------------------------------------------------------
+1. No terminal, inicie a aplicação:
+   npm run dev
+
+2. A aplicação estará disponível em:
+   http://localhost:3000/
+
+--------------------------------------------------------------------------------
+PORTA DEDICADA DE CENÁRIOS (DASHBOARD VISUAL DE TESTES)
+--------------------------------------------------------------------------------
+Para abrir o painel visual com seletores em 1 clique para todos os cenários:
+URL: http://localhost:3000/test
+
+--------------------------------------------------------------------------------
+CENÁRIO 1: ABRIR O APP PELA PRIMEIRA VEZ (FIRST-TIME VISITOR)
+--------------------------------------------------------------------------------
+Objetivo:
+  Simular um usuário novo abrindo o app pela primeira vez na vida.
+Comportamento:
+  - Animação completa de abertura do galho crescendo (Growing Branch) e folhas.
+  - Tela de Boas-Vindas com o Wizard de 10 perguntas de personalização.
+  - Ao responder (ou pular), gera e monta a Starter Week personalizada.
+  - Interface limpa, sem banners de teste.
+
+Comando no terminal:
+  npm run test:first-visit
+
+URL direta no navegador:
+  http://localhost:3000/test?scenario=first-visit
+
+--------------------------------------------------------------------------------
+CENÁRIO 2: ABRIR O APP AO RETORNAR (RETURNING USER)
+--------------------------------------------------------------------------------
+Objetivo:
+  Simular o usuário que já passou pelo onboarding e está retornando no dia a dia.
+Comportamento:
+  - Ignora a animação longa e o wizard de perguntas.
+  - Abre diretamente o Dashboard com a sua semana ativa e os 7 dias visíveis.
+  - Interface limpa, pronta para uso diário.
+
+Comando no terminal:
+  npm run test:returning
+
+URL direta no navegador:
+  http://localhost:3000/test?scenario=returning
+
+--------------------------------------------------------------------------------
+CENÁRIO 3: USUÁRIO SEM CADASTRO (GUEST COM STORAGE LOCAL, SEM IA)
+--------------------------------------------------------------------------------
+Objetivo:
+  Testar o app completo sendo usado localmente por um usuário sem cadastro.
+Comportamento:
+  - O usuário NÃO é forçado a criar conta nem fazer login.
+  - Funcionalidade completa de planejamento:
+      * Marcar e desmarcar tarefas (checkboxes funcionais).
+      * Adicionar novas tarefas no dia desejado.
+      * Preencher reflexões e campos de texto.
+      * Adicionar novas semanas e navegar no histórico.
+  - Armazenamento 100% local no dispositivo (localStorage no Web, AsyncStorage no mobile).
+  - Recursos Premium bloqueados:
+      * Ao clicar em "Refletir com IA" ou "Sugestões com IA", uma janela elegante
+        convida o usuário a criar uma conta ou fazer upgrade para o Anew Premium.
+
+Comando no terminal:
+  npm run test:guest
+
+URL direta no navegador:
+  http://localhost:3000/test?scenario=guest
+
+--------------------------------------------------------------------------------
+CENÁRIO 4: USUÁRIO CADASTRADO GRATUITO (REGISTERED FREE, SEM IA)
+--------------------------------------------------------------------------------
+Objetivo:
+  Testar o app logado com uma conta registrada gratuita.
+Comportamento:
+  - Usuário autenticado com conta (dados isolados por UID).
+  - Salva alterações no escopo da sua conta.
+  - Recursos Premium bloqueados:
+      * Ao tentar usar IA (Gemini), recebe aviso informativo de upgrade para o plano Premium.
+
+Comando no terminal:
+  npm run test:free
+
+URL direta no navegador:
+  http://localhost:3000/test?scenario=free
+
+--------------------------------------------------------------------------------
+CENÁRIO 5: USUÁRIO CADASTRADO PREMIUM (REGISTERED PREMIUM, COM IA TOTAL)
+--------------------------------------------------------------------------------
+Objetivo:
+  Testar o app logado com uma conta Anew Premium com todos os recursos liberados.
+Comportamento:
+  - Usuário autenticado Premium.
+  - Planejamento semanal completo com persistência por UID.
+  - Inteligência Artificial Gemini desbloqueada:
+      * Análise semanal e reflexão em 4 tópicos (o que funcionou, dificuldades, padrões, sugestões).
+      * Assistência inteligente na elaboração de metas da semana.
+
+Comando no terminal:
+  npm run test:premium
+
+URL direta no navegador:
+  http://localhost:3000/test?scenario=premium
+
+--------------------------------------------------------------------------------
+TESTES AUTOMATIZADOS (SUÍTE DE TESTES)
+--------------------------------------------------------------------------------
+Para rodar a suíte completa de testes automatizados (125 testes unitários/integração):
+  npm test
+
+Para verificar a integridade dos tipos TypeScript:
+  npm run typecheck
+
+Para testar o workspace nativo (Expo / React Native):
+  npm run native:typecheck
+================================================================================
