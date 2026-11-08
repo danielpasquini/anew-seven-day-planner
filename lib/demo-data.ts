@@ -4,7 +4,7 @@ import { createStarterGuide, buildPresetGuide } from "./planner"
 import { isValidGuide } from "./backup-validation"
 import { calculateInclusiveEndDate, getTodayFormatted } from "./date-utils"
 
-// Shared native fixtures must not depend on the browser store or its DOM imports.
+// In-memory demo data structures for preview and testing
 export type DemoWeek = {
   id: string; guideId: string; templateId: string; guideVersion?: number
   guideSnapshot?: { id: string; title: string; version: number; completionConfig: GuideTemplate["completionConfig"]; theologyEnabled?: boolean; contentLocale?: "en-US" | "pt-BR"; bibleVersion?: "ARA" | "NVT" | "KJV" | "NIV" | null; sections?: GuideTemplate["sections"] } | null
@@ -59,7 +59,7 @@ function demoGuide(source: GuideTemplate, prefix: string, title?: string): Guide
     usedIds.add(candidate)
     return candidate
   }
-  // Every fixture owns its IDs; edits cannot mutate built-in templates or another guide.
+  // Prefix IDs to isolate demo fixtures from production records
   function namespace(value: unknown): void {
     if (Array.isArray(value)) { value.forEach(namespace); return }
     if (!value || typeof value !== "object") return
@@ -110,7 +110,7 @@ function makeWeek(guide: GuideTemplate, id: string, title: string, startDate: st
       totalTasks: countable.length, completedTasks, completionPercentage: percentual, completedAt: completedAt!,
       taskResults: activities.map((activity) => ({ ...activity, done: done[activity.id], countsTowardCompletion: activity.countsTowardCompletion !== false })),
     } : null,
-    // No invented provider reviews: the actual AI workflow remains disabled in demo.
+    // AI reviews remain unpopulated in demo mode
     aiReview: null, aiReviewVersion: 1, aiReviewOutdated: false,
     data: { text, done }, programacao: { dias: 7, activities },
     progresso: { total: countable.length, concluidas: completedTasks, percentual },

@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${lora.variable} bg-background`}>
+    <html lang="en" data-palette="sage" suppressHydrationWarning className={`${geist.variable} ${lora.variable} bg-background`}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -48,9 +48,7 @@ export default function RootLayout({
                   } else {
                     document.documentElement.classList.remove('dark');
                   }
-                  if (p) {
-                    document.documentElement.setAttribute('data-palette', p);
-                  }
+                  document.documentElement.setAttribute('data-palette', p || 'sage');
                 } catch (e) {}
               })();
             `,

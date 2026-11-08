@@ -205,7 +205,7 @@ export function buildPersonalizedGuide(value: OnboardingAnswers): GuideTemplate 
   } else if (answers.structure !== "checklist") {
     week.blocks.push({ type: "note", label: "Gentle suggestions", text: "The routine below is a set of possibilities, not a list you need to finish. Edit a suggestion, leave a day empty or choose rest whenever it fits." })
   }
-  // All presentation styles retain the live routine renderer, including edit/check controls.
+  // Render interactive weekly schedule block
   week.blocks.push({ type: "schedule", id: "chosen-week", cols: [exampleTime, "Change or rest", "Optional note"], rows: weeklyPlan.map((activity, index) => ({ id: `chosen-day-${index}`, day: days[index], tasks: [activity.description, "—", "—"] })) })
   const review = source("revisao")
   review.blocks = [{ type: "lead", text: "Your week is an experience to understand, not a test to pass." }, { type: "p", text: "Notice what was useful, what did not fit and the conditions around it. Rest and support count as possibilities. You can repeat, reduce, change or leave the guide for now." }, ...record("week-note", "What helped, and what would I like to change or leave open?")]

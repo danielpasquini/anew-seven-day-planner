@@ -80,7 +80,7 @@ export async function generateStructuredJSON(options: {
     for (let attempt = 0; attempt < 3; attempt++) {
       response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", request)
       if (attempt === 2 || ![408, 500, 502, 503, 504].includes(response.status)) break
-      // Keep retries within the original deadline and avoid repeating rate or access failures.
+      // Retry transient errors with exponential backoff
       await response.body?.cancel()
       await delay(1000 * 2 ** attempt + Math.floor(Math.random() * 250), undefined, { signal: controller.signal })
     }

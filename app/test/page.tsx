@@ -15,27 +15,43 @@ function TestScenarioRunner() {
 
   const setupScenario = (target: ScenarioType) => {
     try {
+      localStorage.setItem("guia-palette", "sage")
       if (target === "first-visit") {
         localStorage.removeItem("anew-first-open-v1")
         localStorage.removeItem("anew-introduction-seen-v1")
         localStorage.removeItem("anew-user-tier")
+        localStorage.removeItem("anew-test-user")
         localStorage.removeItem("guia-retomada-v2:guest")
       } else if (target === "returning") {
         localStorage.setItem("anew-first-open-v1", "seen")
         localStorage.setItem("anew-introduction-seen-v1", "seen")
+        localStorage.removeItem("anew-test-user")
         localStorage.setItem("anew-user-tier", "guest")
       } else if (target === "guest") {
         localStorage.setItem("anew-first-open-v1", "seen")
         localStorage.setItem("anew-introduction-seen-v1", "seen")
+        localStorage.removeItem("anew-test-user")
         localStorage.setItem("anew-user-tier", "guest")
       } else if (target === "free") {
         localStorage.setItem("anew-first-open-v1", "seen")
         localStorage.setItem("anew-introduction-seen-v1", "seen")
         localStorage.setItem("anew-user-tier", "free")
+        localStorage.setItem("anew-test-user", JSON.stringify({
+          uid: "anew-free-admin",
+          email: "free@anew.local",
+          emailVerified: true,
+          displayName: "Admin Free",
+        }))
       } else if (target === "premium") {
         localStorage.setItem("anew-first-open-v1", "seen")
         localStorage.setItem("anew-introduction-seen-v1", "seen")
         localStorage.setItem("anew-user-tier", "premium")
+        localStorage.setItem("anew-test-user", JSON.stringify({
+          uid: "anew-premium-admin",
+          email: "tester@anew.local",
+          emailVerified: true,
+          displayName: "Admin Premium",
+        }))
       }
     } catch {
       // Storage fallback

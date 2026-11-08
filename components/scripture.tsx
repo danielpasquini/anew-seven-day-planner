@@ -7,7 +7,7 @@ import { BibleProvider } from "@/lib/bible/bible-provider"
 export function ScriptureBlock({ scripture }: { scripture: Scripture }) {
   const { locale, bibleVersion, activeGuide, t } = useStore()
 
-  // Invariant: If theology is disabled, do not render scripture
+  // Only render when spiritual content is enabled
   if (!activeGuide.theologyEnabled || !scripture) {
     return null
   }

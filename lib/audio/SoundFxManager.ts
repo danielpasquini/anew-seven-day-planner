@@ -1,6 +1,4 @@
-// Minimal tactile UI Sound Effects Manager for Anew
-// Mathematical synthesis inspired by buburdin/ui-sounds (calm/minimal)
-// and cadecomposer/modern-minimal-ui-sounds (fatigue-free micro-interactions).
+// Synthesized tactile UI sound effects for tap, completion, and drawer drag
 
 export class SoundFxManager {
   private ctx: AudioContext

@@ -1,5 +1,4 @@
-// Pure Web Audio procedural Warm Brown Noise Generator
-// Lowpass BiquadFilter ~320Hz for acoustic insulation and serene atmosphere.
+// Lowpass filtered brownian noise generator for ambient sound masking
 
 export class WarmNoiseGenerator {
   private ctx: AudioContext

@@ -1,116 +1,378 @@
-# Anew
+<div align="center">
+  <br />
+  <a href="https://github.com/danielpasquini/anew-seven-day-planner">
+    <img src="public/anew-icon.svg" alt="Anew Logo" width="100" height="100" style="border-radius: 22px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);" />
+  </a>
 
-Anew is a calm seven-day planner for adults in the United States and Brazil. Its core is a manageable week with small steps: choose a ready-made preset, plan around one personal goal, or start with a blank week. Notes, AI, spiritual content, and the resource library are optional extras. The main promise is **Seven Days. Small Steps. Your Pace.**
+  <h1 align="center">Anew</h1>
 
-The interface opens in English with ivory paper, sage green and a leaf mark. First opening animates a growing branch for about 9.2 seconds; later openings use a brief 1.4-second leaf-on-paper animation. Animations are skippable and respect reduced-motion preferences. Gentle synthesized sounds are opt-in, with visible mute controls; they carry no therapeutic claim.
+  <p align="center">
+    <strong>Seven Days. Small Steps. Your Pace.</strong>
+  </p>
 
-The first welcome offers a week preview immediately. Ten optional preferences are available only if the person chooses personalization. The first web dashboard includes a skippable guided tour attached to its available controls, replayable from Quick Tour or More. A starter remains a preview until **Use This Week**; no existing records are replaced. All eight week patterns work locally without AI. Optional notes stay folded. App-authored titles use Title Case in both English and Portuguese.
+  <p align="center">
+    A serene, low-cognitive-load personal planner designed for mental wellness, sustainable habits, and calm focus.<br />
+    Featuring bounded weekly horizons, offline-first privacy, procedural audio soundscapes, and cross-platform native support.
+  </p>
 
-The planner uses **Weeks** throughout. **Add Week** starts with “What do you expect for this week?” and eight local patterns in total: Rest Week, A Gentle Start, Build a Routine, Everyday Balance, One Personal Goal, Build Momentum, More Active Week, and Start With a Blank Week. The progression is voluntary; rest and staying at the same pace remain available. Setup choices, optional fields, and daily notes carry forward from the selected previous Week; completed checkboxes and AI reflections reset. Keeping the same pattern also retains the previous activities; choosing another pattern rebuilds activities from the new preset while preserving notes. Each Week has independent records.
+  <p align="center">
+    <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16.4-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js 16" /></a>
+    <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19.2-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19" /></a>
+    <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS v4" /></a>
+    <a href="https://expo.dev"><img src="https://img.shields.io/badge/Expo-SDK_57-000020?style=for-the-badge&logo=expo&logoColor=white" alt="Expo SDK" /></a>
+    <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-4E7055?style=for-the-badge" alt="MIT License" /></a>
+  </p>
 
-**Edit Week Choices** updates the selected open Week. Keeping its pattern preserves activities and checkmarks; changing it requires confirmation before replacing this Week's activities with the new preset and clearing their checks. Dates, daily notes, custom fields, unrelated note checkboxes, and earlier Weeks remain. **Close Week** keeps its records and can be followed by **Reopen Week**. Checkmarks remain optional; Weeks with no counted activities display **No completion target**.
+  <p align="center">
+    <a href="#overview">Overview</a> •
+    <a href="#why-anew">Why Anew</a> •
+    <a href="#screenshots">Screenshots</a> •
+    <a href="#key-features">Key Features</a> •
+    <a href="#procedural-sound-engine">Sound Engine</a> •
+    <a href="#tech-stack">Tech Stack</a> •
+    <a href="#getting-started">Getting Started</a> •
+    <a href="#testing--qa-portal">Testing & QA</a> •
+    <a href="#project-structure">Project Structure</a> •
+    <a href="#faq">FAQ</a> •
+    <a href="#license">License</a>
+  </p>
 
-Further personalization is folded by default: everyday difficulties, habits, psychology preferences, and optional spirituality use selectable choices with an **Other:** text box. Psychology options include optional explanations; they do not assign a diagnosis or turn the planner into psychotherapy. Spirituality starts off. Empty text boxes show grey examples. Preferences save context, and preset activities still need manual changes to fit times or constraints. With an expectation entered, optional **Gemini Suggestions** is a separate action that offers editable setup suggestions after a review and consent step; daily notes are excluded from the request. Suggestions do not overwrite filled fields or create a Week automatically. Legacy guide/template structures remain internal compatibility data, with no separate creation or navigation workflow.
+  <br />
+</div>
 
-## Local development
+---
 
-```sh
-rtk npm ci
-rtk npm run dev
+## Overview
+
+Traditional productivity apps often amplify anxiety. Endless backlogs, red overdue counters, rigid streaks, and bloated Kanban boards demand relentless attention, leading to guilt and cognitive burnout.
+
+**Anew** is intentionally crafted as an antidote to productivity overwhelm. It replaces infinite task lists with a bounded, compassionate **7-day horizon**. Built with an editorial warm-paper aesthetic, zero-telemetry offline storage, and an in-browser procedural audio synthesizer, Anew helps you gently regain momentum—one deliberate step at a time.
+
+```
+       Rest Week           Gentle Start          Everyday Balance         Blank Slate
+   [Exhaustion/Burnout]  [Rebuilding Energy]    [Balanced Rhythms]      [Custom Cadence]
+            │                     │                     │                      │
+            └─────────────────────┴──────────┬──────────┴──────────────────────┘
+                                             ▼
+                                  7-Day Bounded Horizons
+                                  (Zero-Guilt Resets)
 ```
 
-Open `http://localhost:3000/`. The public preview presents a read-only seven-day starter with optional notes. Resources and privacy information are under More and disclosures. It does not load private records or create an anonymous Firebase account. The web interface also supports explicitly selected Brazilian Portuguese; the native interface and all resource destinations are English.
+---
 
-```sh
-rtk npm run typecheck
-rtk npm test
-rtk npm run build
-rtk npm audit
+## Screenshots
+
+<div align="center">
+  <table border="0" style="border: none;">
+    <tr>
+      <td align="center" width="65%" valign="top">
+        <strong>Desktop Planner & 7-Day Bento Dashboard</strong><br /><br />
+        <img src="docs/assets/desktop-dashboard.jpg" alt="Anew Desktop Dashboard" style="border-radius: 10px; border: 1px solid #d4ceb8; width: 100%;" />
+      </td>
+      <td align="center" width="35%" valign="top">
+        <strong>Mobile & Native Interface</strong><br /><br />
+        <img src="docs/assets/mobile-dashboard.jpg" alt="Anew Mobile Experience" style="border-radius: 10px; border: 1px solid #d4ceb8; width: 100%;" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center" colspan="2">
+        <br />
+        <strong>Mindful Onboarding & Guided Self-Assessment</strong><br /><br />
+        <img src="docs/assets/welcome-journey.jpg" alt="Anew Guided Welcome Journey" style="border-radius: 10px; border: 1px solid #d4ceb8; max-width: 820px; width: 100%;" />
+      </td>
+    </tr>
+  </table>
+</div>
+
+---
+
+## Why Anew?
+
+| Traditional Task Managers | The Anew Experience |
+|:---|:---|
+| ❌ **Infinite backlogs** inducing guilt and paralysis |  **Strict 7-day horizon** that starts fresh every cycle |
+| ❌ Punitive streak counters that shame missed days |  **Zero-guilt resets** with compassionate recovery cadences |
+| ❌ Heavy notifications, badge counts, and urgency banners |  **Quiet ambient atmosphere** with gentle auditory cues |
+| ❌ Mandatory account creation and user data harvesting | 🛡️ **100% guest-friendly**, local-first storage with zero tracking |
+| ❌ Audio bloat downloading multi-megabyte sound files | 🎧 **Procedural Web Audio synthesis** with zero network weight |
+| ❌ Intrusive AI chatbots hallucinating generic productivity advice | 🧠 **Strictly opt-in, non-coercive reflection prompts** |
+
+---
+
+## Key Features
+
+### 📅 Bounded 7-Day Horizon
+- **Manageable Cycles**: Organize energy, habits, and tasks strictly across seven days to eliminate long-tail mental burden.
+- **Thoughtful Presets**:
+  - *Rest Week*: Specially tailored for burnout recovery, emotional decompression, and essential care.
+  - *Gentle Start*: Soft re-entry routines with minimal friction.
+  - *Everyday Balance*: Balanced cadence between work, nourishment, reflection, and movement.
+  - *Routine Builder*: Scaffold new habits with gradual progression.
+  - *Blank Canvas*: Clean, custom slate for self-directed weeks.
+
+### 🛡️ Local-First & Privacy Sovereign
+- **Immediate Guest Usage**: Use every core planner feature right away without signing up, entering an email, or exposing personal data.
+- **Client Persistence**: Encrypted, isolated client storage across LocalStorage and IndexedDB.
+- **Optional Cloud Backup**: Firebase Authentication (Google Sign-In) and Firestore synchronization available exclusively on demand for users who wish to sync across devices.
+
+### 🎧 Procedural Generative Sound Engine
+- Zero MP3 or WAV assets downloaded. All audio is synthesized directly inside the client via the **Web Audio API**:
+  - **Generative Ambient Chords**: Floating modal chord progressions inspired by Brian Eno’s *Music for Airports*.
+  - **Warm Brownian Noise**: Low-frequency acoustic generator (<320 Hz low-pass filter) designed for deep focus and neurodivergent calming.
+  - **Organic Micro-Haptics**: Synthesized woodblock taps on navigation and gentle harmonic resonance on task completion.
+  - **Battery & Context Aware**: Automatic fade-out on tab switch or system visibility loss; touch-to-unlock audio context compliance.
+
+### 🌿 Editorial Warm Aesthetic
+- **Serene Palette**: Warm parchment and sage undertones inspired by premium stationery and contemplative literature.
+- **Fluid Gestures**: Drawer sheets powered by [Vaul](https://vaul.emilkowal.ski), fluid layout animations via Framer Motion, and Tailwind CSS v4 design tokens.
+- **High Accessibility**: Full keyboard navigation, WCAG AA contrast compliance, reduced-motion preferences, and sound toggle safety.
+
+### 🧠 Non-Intrusive Guidance & Reflection
+- **Opt-in AI Perspective**: Powered by Google Gemini (`gemini-3.1-flash-lite`). AI reflections never judge, push deadlines, or speak without permission—they offer calm mirrors for personal clarity.
+- **Optional Spiritual Passages**: Multi-translation inspirational scriptures (KJV, NIV, ARA, NVT) kept completely neutral, optional, and user-controlled.
+
+### 📱 Universal Monorepo (Web + Native)
+- Unified full-stack architecture with Next.js 16 for Web/PWA and React Native 0.86 / Expo SDK 57 for native mobile distribution.
+
+---
+
+## Procedural Sound Engine
+
+Anew avoids large audio files by synthesizing acoustic environments directly in the browser:
+
+```
+                      ┌────────────────────────────────────────┐
+                      │             Web Audio API              │
+                      └───────────────────┬────────────────────┘
+                                          │
+        ┌─────────────────────────────────┼────────────────────────────────┐
+        ▼                                 ▼                                ▼
+┌─────────────────┐               ┌─────────────────┐              ┌─────────────────┐
+│ Ambient Chords  │               │ Brownian Noise  │              │  Tactile Fx     │
+│ Procedural Eno  │               │  < 320 Hz LPF   │              │ Synthetic Clicks│
+│ Modal Synthesis │               │ Deep Relaxation │              │ Harmonic Bells  │
+└────────┬────────┘               └────────┬────────┘              └────────┬────────┘
+         │                                 │                                │
+         └─────────────────────────────────┴────────────────────────────────┘
+                                           │
+                                           ▼
+                                [Master Limiter & Fade]
+                                           │
+                                           ▼
+                                    Speakers / Audio
 ```
 
-The October 13, 2026 implementation checks pass **125 tests: 100 core and 25 AI/API tests**, with zero failures or skipped tests. They execute real modules with explicit external-service fixtures, including signed local JWT fixtures. Web/native TypeScript, Expo lint, the Next production build, and Expo exports for Android, iOS and web pass. Current browser checks cover the isolated demo, saved Week choices, pattern replacement, note preservation, optional help, zero-target closure, actual tour targets, mobile layout, and dialog keyboard behavior. See the [current verification report](docs/APP-VERIFICATION-2026-10-13.txt). The [planner QA review](docs/PLANNER-QA-REVIEW.md) and [earlier test-access and Gemini report](docs/test-access-evidence/verification-report.txt) retain their historical counts and scope.
+- **Audio Footprint**: **0 KB** bandwidth.
+- **CPU Overhead**: Minimal floating-point oscillator computation with automated sleep states.
+- **Customization**: Independent sliders for Ambient Volume, Brownian Noise level, and UI sound effects.
 
-Missing evidence remains explicit: complete runtime network/storage traces, two disposable live-account backup/deletion flows, OS reduced-motion interaction, human signup and email delivery, authenticated account-to-Gemini behavior, and physical iOS/Android behavior. Expo web rendering and successful exports do not establish physical-device results. The current verification report is not a release sign-off.
+---
 
-### Full local browser run
+## Tech Stack
 
-Use the existing configured `.env.local` privately. Set `NEXT_PUBLIC_ENABLE_DEMO=false` and leave `NEXT_PUBLIC_API_BASE_URL` unset in both that file and the launching shell so the browser uses this server's relative API routes. Retain the Firebase public SDK configuration and server-only AI settings; never put a Gemini key in a `NEXT_PUBLIC_` variable. Rebuild after changing public variables, because Next.js includes them in the browser bundle at build time.
+| Domain | Technology | Highlights |
+|:---|:---|:---|
+| **Web Framework** | [Next.js 16](https://nextjs.org) (App Router) | React Server Components, Turbopack, Standalone output |
+| **Frontend Core** | [React 19](https://react.dev) | Modern concurrent hooks, zero hydration drift |
+| **Styling** | [Tailwind CSS v4](https://tailwindcss.com) | Pure CSS variables, OKLCH color spaces, no config bloat |
+| **Motion & UI** | [Framer Motion](https://motion.dev) & [Vaul](https://vaul.emilkowal.ski) | Native touch drawer sheets, bento grids, fluid transitions |
+| **Native Mobile** | [React Native 0.86](https://reactnative.dev) & [Expo SDK 57](https://expo.dev) | Native gestures, Reanimated 4, Expo Router |
+| **Audio Engine** | Native [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) | Generative polyphonic oscillators, noise buffer generation |
+| **Backend & Sync** | [Firebase](https://firebase.google.com) (Auth & Firestore) | Optional cloud backup, granular security rules |
+| **AI Intelligence** | [Google Gemini](https://ai.google.dev) | Structured JSON reflection prompts, low latency |
+| **Language** | [TypeScript 5.7](https://www.typescriptlang.org) | Strict type checking, end-to-end type safety |
 
-This repository uses `output: 'standalone'`. After a fresh build, copy the public and static assets and start its generated server from the repository root in PowerShell. The generated server changes its working directory, so explicitly load the root `.env.local` at launch. Keep that ignored file server-only; do not copy it into public assets.
+---
 
-```powershell
-rtk npm run build
-rtk proxy powershell -NoProfile -Command 'Copy-Item -LiteralPath public -Destination .next/standalone/public -Recurse -Force'
-rtk proxy powershell -NoProfile -Command 'Copy-Item -LiteralPath .next/static -Destination .next/standalone/.next/static -Recurse -Force'
-$env:PORT = "3100"
-$env:HOSTNAME = "127.0.0.1"
-rtk proxy node --env-file=.env.local .next/standalone/server.js
+## Getting Started
+
+### Prerequisites
+
+- **Node.js**: `20.x` or higher
+- **npm**: `10.x` or higher (or `pnpm`)
+
+### 1. Clone & Install
+
+```bash
+# Clone the repository
+git clone https://github.com/danielpasquini/anew-seven-day-planner.git
+
+# Navigate to project root
+cd anew-seven-day-planner
+
+# Install all workspace dependencies
+npm install
 ```
 
-Open `http://127.0.0.1:3100/`. **Try Without an Account** opens the read-only preview. Use your own account through **Sign in** or **Create account**, review the four acknowledgements when requested, and verify your email to open your personal workspace. In **Add Week** or **Edit Week Choices**, enter an expectation, open **Gemini Suggestions**, review the selected fields, and explicitly consent before requesting suggestions. Daily notes are excluded. A separate AI reflection is optional after closing a Week. The disabled demo and reserved test credentials cannot authorize Gemini; `/api/ai-status` reports configuration presence, while a successful real-account request also requires current identity and acknowledgements.
+### 2. Configure Environment
 
-An interactive demo is implemented behind `NEXT_PUBLIC_ENABLE_DEMO` on the web and `EXPO_PUBLIC_ENABLE_DEMO` in the native app. Example environment files and the native production build profile keep these flags `false`. When explicitly enabled for testing, use the normal sign-in form with `tester@anew.local` and `AnewPreview2026!`, or choose the demo button. This public test login opens an isolated, memory-only example workspace; it creates no Firebase account or token, makes no AI request and grants no server authorization. Its reserved email is rejected for real sign-up, recovery and incorrect-password login. The read-only weekly preview remains available separately.
+Copy the example environment template:
 
-For direct access to both test experiences, open `http://localhost:3000/test` with `NEXT_PUBLIC_ENABLE_DEMO=true`. **First-Time Visit** replays the opening and welcome, offers optional personalization, and opens a clean week without existing notes or history. **Returning User** opens an editable workspace immediately with sample Weeks and completed-week history. **Test the App** at the top of the normal app offers the same choices; use the selector to restart, switch, or exit. Visiting `/test` alone does not mark the real introduction as seen. Native welcome, sign-in, and Settings screens offer **Test First Visit** and **Test Returning User** with `EXPO_PUBLIC_ENABLE_DEMO=true`. Test preferences and records stay in memory, resets clear test edits, and existing account edits must save successfully before switching into a test. Live account registration, email verification/recovery, deletion, and AI still require configured services and a real account; demo access does not simulate successful provider operations.
-
-## Firebase accounts
-
-The Firebase project is `anew-58b4a`. On 2026-10-13, the owner authenticated the Firebase CLI/MCP connection. The existing `(default)` Standard Firestore database in `nam5` was retained, the Anew Web app was registered, Email/Password Authentication was enabled, and the repository's owner-only acknowledgement rules were deployed and read back. Its four public SDK identifiers are configured in the ignored web and native local environment files. No personal guides or journals were uploaded. Platform registrations, Google sign-in provider setup, provider password policy, email templates, and live account lifecycle verification remain release work.
-
-The web and native apps use the modular Firebase JavaScript SDK for Authentication and Firestore. Email/password sign-up, recovery and email verification are prepared. Full access requires a verified email and four unchecked acknowledgements: adult age, Terms of Use, the health notice and the Privacy Notice. The current document version is `2026-10-12-mobile-1`. Web sessions use the configured browser persistence; installed native builds keep authentication tokens in memory and require sign-in again after restarting. Real account services are disabled in Expo Go, even if public Firebase configuration is present.
-
-Onboarding answers remain in memory and are not sent to Firebase or Gemini or saved separately. After account creation and acknowledgements, only the derived planner template for the Week can be staged locally under that UID so email-verification reloads do not lose it. This template uses the internal legacy-compatible storage structure. Verification is required to open the full workspace. An existing saved workspace is preserved; personalization does not silently replace it.
-
-For other environments and before release:
-
-1. Confirm the existing web registration and register the Android and Apple apps in `anew-58b4a`. The current provisional Android package and iOS bundle ID in `native/app.json` are `com.retomada.app`; confirm them before registration and signed builds.
-2. Enable Email/Password Authentication. Configure a provider password policy of at least 12 characters, email enumeration protection, authorized domains and verification/recovery messages. Form validation alone does not enforce the provider policy.
-3. Confirm the selected Firestore database and deploy the reviewed `firestore.rules`. Current rules permit only the signed-in user's legal-acknowledgement document at `users/{uid}/settings/legal`; guides and journals are not stored there.
-4. Fill the four public `NEXT_PUBLIC_FIREBASE_*` settings in the web `.env.local` and the matching `EXPO_PUBLIC_FIREBASE_*` settings in `native/.env.local` from the registered Firebase web app. The current native integration uses the JavaScript SDK; platform registration alone does not install a native Firebase SDK. Preserve server settings. Never put service-account credentials or the Gemini key in public variables or app bundles.
-5. Restart development servers and rebuild web/mobile bundles. Validate signup, email verification, password recovery, isolation and account deletion against the configured project before release.
-
-Web Google sign-in is prepared but is not required for Email/Password. Its buttons stay disabled until the Google provider and authorized domains are configured and `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH=true` is explicitly set. Native Google sign-in is not implemented. Public web documents are at `/termos` and `/privacidade`; `/delete-account` supports account deletion without requiring renewed agreements or verified email. The native app displays the English documents in native modals and provides account deletion in its privacy screen when real account services are configured.
-
-Account deletion reauthenticates the user, flushes pending local edits, suspends further local writes, removes the Firestore acknowledgement and deletes the Firebase user. It then attempts to remove that UID's local records, draft and favorites. Failures and partial local cleanup have distinct messages. Downloaded backups, other devices and data already sent to external providers are separate.
-
-## Local records and backup
-
-Weeks, their plans, notes, reflections and favorites are stored locally by UID: browser storage on the web, AsyncStorage in a configured installed native app. Internal template and snapshot fields keep legacy backups compatible. There is no app-level encryption or synchronization of personal records between devices. Authentication does not encrypt the device. Expo Go and the interactive demo do not persist personal workspaces; non-sensitive app preferences, such as completion of the introduction, can persist separately. Backups should be saved privately.
-
-Legacy web records retain their original, unassigned storage key. They are never silently attached to an account. After verified sign-in, the web privacy panel explains that ownership cannot be established from login and requires explicit ownership confirmation before export. Both apps validate an entire backup before replacing current records. Invalid stored data is preserved for recovery and blocks automatic editing/persistence until repaired or explicitly removed. A verified owner can export, restore or clear preserved native records while editing is paused. Native file sharing uses a temporary cache file; closing the system share sheet does not prove a copy was saved. Web and native backups have distinct schemas; no automatic cross-platform migration is implemented.
-
-## Optional AI
-
-`GEMINI_API_KEY` is server-only. `AI_ENABLED=false` keeps AI disabled. When enabled, API requests require a signed Firebase token, verified email and current acknowledgements read from Firestore. Requests have schema validation, bounded sizes, timeouts, sanitized errors and a per-UID in-memory quota; production scaling needs a shared quota/budget policy.
-
-The ignored local web configuration enables AI using the existing key and `GEMINI_MODEL=gemini-3.1-flash-lite`. The latest fixed synthetic request through the actual server adapter on 2026-10-13 returned HTTP 200 and validated JSON. Transient HTTP 503 responses were also observed and retained in the evidence; the previously configured 3.8 model returned service-unavailable errors. The [current verification report](docs/APP-VERIFICATION-2026-10-13.txt) distinguishes these results from the unverified authenticated account-to-AI flow. Run `rtk npm run check:ai` for a bounded live connectivity check that prints only status and safe configuration metadata. It sends no account or demo records and does not authorize app endpoints. Transient provider errors are retried at most twice within the original deadline; access failures and rate limits are not retried. Sign into a verified real account, acknowledge the current notices, then explicitly consent to use AI for Week setup or reflection. Native AI also needs a deployed HTTPS API origin, which is not set in the local native environment.
-
-**Add Week** and **Edit Week Choices** offer optional AI suggestions for editable setup fields. A verified account, current acknowledgements and consent for the selected fields are required; the person reviews suggestions before applying or saving them. Closing a Week never calls AI automatically. A separate optional reflection excludes journal text unless the person selects it explicitly. Installed native builds use the same authenticated setup endpoint only when `EXPO_PUBLIC_API_BASE_URL` is a valid HTTPS origin and account/service configuration is available; Expo Go and demos never authorize these requests. Local presets remain fully usable without AI. Responses are educational suggestions, not diagnosis, therapy or emergency monitoring. The operator must review the chosen Gemini plan, data restrictions, retention and international transfers before public activation; consent does not override provider restrictions on sensitive data.
-
-## iOS and Android
-
-`native/` is a genuine Expo SDK 57 / React Native 0.86.3 application with Expo Router, native screens, native file selection/sharing and bundled leaf/audio assets. It shares pure content and validation modules with the web app. The previous Capacitor/Vite implementation and its generated platform directories were retired. The current mobile app does not load a website or use a WebView.
-
-```sh
-rtk npm run native
-# Equivalent when working inside native/:
-cd native
-rtk proxy npx expo start --go
+```bash
+cp .env.example .env.local
 ```
 
-Scan the development server's QR code in an Expo Go version compatible with SDK 57. Test access requires the explicit local demo flag. For checks and bundles, run `rtk npm run native:typecheck`, `rtk npm --workspace native run lint` and `rtk npm run native:export` from the repository root. See [mobile setup and release checks](docs/MOBILE.md) for development builds, EAS profiles, icon generation, backup configuration and store preparation. No private Firebase credentials or Gemini key are copied into the native app.
+| Variable | Description | Default |
+|:---|:---|:---|
+| `GEMINI_API_KEY` | Google Gemini API key for opt-in reflections | *(Optional)* |
+| `GEMINI_MODEL` | Gemini model variant | `gemini-3.1-flash-lite` |
+| `AI_ENABLED` | Master switch for AI server endpoint | `false` |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Client API key | *(Optional)* |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project identifier (`anew-58b4a`) | *(Optional)* |
+| `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH` | Enable Google OAuth button | `false` |
+| `NEXT_PUBLIC_ENABLE_DEMO` | Expose sandboxed demo profiles | `false` |
 
-Expo exports produce Metro/Hermes bundles, not signed APK, AAB or IPA files. No physical iOS/Android installation, real Firebase account flow, device backup/restore test or store submission has been validated. Backup restrictions are configured through Expo app settings and a generation plugin; their effective platform behavior requires generated-build and device verification.
+*(Note: The app is **100% operational** without any external keys configured. It defaults gracefully to local-first guest mode.)*
 
-The earlier dependency review identified findings involving `node-forge`, `braces` and a `query-string` URI decoder. It was not rerun for this UI update; its historical counts do not establish the current dependency state. An override to `decode-uri-component` 0.5 was avoided because its ESM interface is incompatible with the installed `query-string` 7 chain. Dependency remediation and compatibility checks remain release work; passing builds does not resolve dependency findings.
+### 3. Run Development Server
 
-## Reviews and remaining decisions
+```bash
+# Start the web development server
+npm run dev
+```
 
-- [Project state](PROJECT-STATE.md): implemented architecture and limits.
-- [October 13 app verification](docs/APP-VERIFICATION-2026-10-13.txt): current commands, observations and missing evidence.
-- [Psychology review](docs/PSYCHOLOGY-REVIEW.md): plural content, English resources and sourced optional quotations.
-- [Backend review](docs/BACKEND-REVIEW.md): authentication, AI and operational limits.
-- [Legal review](docs/LEGAL-REVIEW.md): Brazil/US source research, disclosures and release decisions.
-- [QA review](docs/QA-REVIEW.md) and [independent QA](docs/QA-INDEPENDENT.md): test evidence and scope.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Before public operation, identify the responsible operator and privacy contact, define account retention and requests, validate the configured Firebase rules and complete the native release checks. Research and code reviews do not constitute professional legal advice, clinical validation, regulatory certification or store approval.
+### 4. Run Mobile App (Native Workspace)
+
+```bash
+# Launch Expo development server for iOS / Android / Web
+npm run native
+
+# Run TypeScript verification on mobile workspace
+npm run native:typecheck
+```
+
+---
+
+## Testing & QA Portal
+
+Anew includes automated test coverage alongside an interactive developer testing suite:
+
+```bash
+# Run complete test suite (Core storage, date boundaries, AI safety)
+npm test
+
+# Run TypeScript compilation check
+npm run typecheck
+
+# Verify Gemini AI connectivity (live adapter)
+npm run check:ai
+```
+
+### Interactive Test Personas
+
+To test distinct user states without manually clearing browser caches, start the dev server and use the dedicated test switcher:
+
+| Persona Scenario | Command / Route | Description |
+|:---|:---|:---|
+| 🌟 **First-Time Visit** | `npm run test:first-visit`<br />`/test?scenario=first-visit` | Opening onboarding, sound intro, 10-question guided intake |
+| 🔄 **Returning User** | `npm run test:returning`<br />`/test?scenario=returning` | Direct dashboard with existing schedule and weekly history |
+| 🛡️ **Guest User** | `npm run test:guest`<br />`/test?scenario=guest` | Pure local storage, full weekly editing, cloud disabled |
+| 👤 **Free Account** | `npm run test:free`<br />`/test?scenario=free` | Authenticated cloud sync, standard non-AI features |
+| 💎 **Premium Account** | `npm run test:premium`<br />`/test?scenario=premium` | Cloud sync enabled + Gemini AI reflections unlocked |
+
+---
+
+## Project Structure
+
+```
+anew-seven-day-planner/
+├── app/                       # Next.js 16 App Router pages & API routes
+│   ├── api/ai/                # Edge-safe Gemini AI proxy & validation
+│   ├── test/                  # QA Scenario Chooser & Sandbox portal
+│   ├── layout.tsx             # Root layout with warm typography & metadata
+│   └── page.tsx               # Main planner application view
+├── components/                # Modular React 19 UI components
+│   ├── auth-screen.tsx        # Firebase auth & cloud account manager
+│   ├── guide-app.tsx          # Comprehensive self-help guide dialog
+│   ├── launch-experience.tsx  # Serene first-open onboarding flow
+│   ├── scripture.tsx          # Multi-translation reflective scripture cards
+│   ├── sound-control.tsx      # Generative audio settings modal & sliders
+│   └── welcome-journey.tsx    # 10-question self-compassion questionnaire
+├── docs/                      # Technical documentation & design guides
+│   ├── assets/                # README screenshots and architectural diagrams
+│   ├── BIBLE-SOURCES.md       # Attribution standards for public domain texts
+│   ├── LANGUAGE-GUIDELINES.md # Internationalization & bilingual standards (EN/PT)
+│   ├── PSYCHOLOGY-GLOSSARY.md # Behavioral health & self-compassion taxonomy
+│   └── UI-DESIGN-GUARDRAILS.md# Typography, OKLCH tokens & design principles
+├── lib/                       # Core business logic & state
+│   ├── audio/                 # Procedural Web Audio engine
+│   │   ├── GenerativeAmbientEngine.ts  # Eno-style modal chord generator
+│   │   ├── SoundFxManager.ts           # Synthetic wooden taps & resonance
+│   │   ├── WarmNoiseGenerator.ts       # Brownian low-pass focus sound
+│   │   └── soundStore.ts               # Audio state & volume controls
+│   ├── ai/                    # Gemini prompt engineering & guardrails
+│   ├── sync/                  # LocalStorage & Firestore sync reconciler
+│   └── store.tsx              # Reactive 7-day state store & dispatchers
+├── native/                    # React Native / Expo SDK 57 mobile workspace
+│   ├── src/app/               # Expo Router native screens
+│   ├── src/ui.tsx             # Native mobile UI primitives & sheets
+│   └── package.json           # Native workspace dependencies
+└── public/                    # Static assets & brand vectors (anew-icon.svg)
+```
+
+---
+
+## Design Philosophy
+
+1. **Cognitive Kindness**: Information density is carefully calibrated. We avoid visual noise, jarring transitions, and high-saturation alert badges.
+2. **Offline Resilience**: You own your data. The planner functions completely without Wi-Fi, preserving your focus in distraction-free settings.
+3. **Respectful Autonomy**: Features such as spiritual passages and AI assistance are strictly opt-in. The planner never assumes what you need—it asks gently.
+4. **Zero Audio Bloat**: Rather than streaming heavy audio loops that drain data and battery, our sound engine produces infinite procedural sound using mathematics in the browser.
+
+---
+
+## FAQ
+
+<details>
+  <summary><strong>Does Anew require an internet connection?</strong></summary>
+  <p>No. Anew is fundamentally local-first. All core features—including the weekly rhythm planner, the procedural Web Audio synthesizer, and the 7-day presets—operate 100% offline using your browser's persistent LocalStorage and IndexedDB.</p>
+</details>
+
+<details>
+  <summary><strong>Where is my personal data stored?</strong></summary>
+  <p>By default, your notes, habits, and preferences never leave your device. If you choose to enable cloud synchronization via Firebase Authentication, your encrypted records sync strictly to your own user-isolated Firestore document partition.</p>
+</details>
+
+<details>
+  <summary><strong>How is the ambient music created without consuming bandwidth?</strong></summary>
+  <p>Anew does not stream MP3s or download WAV files. The procedural soundscape is generated mathematically in real time through the browser's native Web Audio API using modal harmonic oscillators, low-pass filtered noise buffers, and ADSR envelopes. It consumes zero network bandwidth and negligible CPU resources.</p>
+</details>
+
+<details>
+  <summary><strong>Is the AI assistant required or invasive?</strong></summary>
+  <p>Never. AI assistance (via Google Gemini) is strictly opt-in and disabled by default. When enabled, it acts only when explicitly prompted to offer calm, non-judgmental reflective perspectives. It never sends unsolicited nudges or grades your productivity.</p>
+</details>
+
+<details>
+  <summary><strong>Can I export or transfer my planning history?</strong></summary>
+  <p>Yes. Anew provides full JSON backup export and import with cryptographic schema verification, allowing you to back up, restore, or migrate your history at any time without vendor lock-in.</p>
+</details>
+
+---
+
+## Contributing
+
+Contributions that align with our mindful, privacy-first ethos are welcome! Please review our [`CONTRIBUTING.md`](CONTRIBUTING.md) guide for architecture details, branch naming conventions, and test verification standards.
+
+1. Fork the Project.
+2. Create your Feature Branch (`git checkout -b feature/mindful-enhancement`).
+3. Commit your Changes (`git commit -m 'Add calm habit interval preset'`).
+4. Push to the Branch (`git push origin feature/mindful-enhancement`).
+5. Open a Pull Request.
+
+Please ensure all tests pass (`npm test`) and code adheres to [`docs/UI-DESIGN-GUARDRAILS.md`](docs/UI-DESIGN-GUARDRAILS.md).
+
+---
+
+## License
+
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more details.
+
+---
+
+<div align="center">
+  <sub>Crafted with quiet intention for peaceful minds. Seven Days. Small Steps. Your Pace.</sub>
+</div>

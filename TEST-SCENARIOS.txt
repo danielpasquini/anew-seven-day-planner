@@ -126,3 +126,18 @@ Para verificar a integridade dos tipos TypeScript:
 Para testar o workspace nativo (Expo / React Native):
   npm run native:typecheck
 ================================================================================
+
+1. Usuário Administrador / Teste (Plano Free)
+E-mail: free@anew.local (ou qualquer e-mail sem a palavra premium)
+Senha: AnewPreview2026!
+2. Usuário Administrador / Teste (Plano Premium — com IA Gemini liberada)
+E-mail: tester@anew.local (ou premium@anew.local)
+Senha: AnewPreview2026!
+
+npm run test:free      # Abre como Free
+npm run test:premium   # Abre como Premium
+npm run test:guest     # Abre como Visitante
+
+http://localhost:3000/test?scenario=free
+http://localhost:3000/test?scenario=premium
+http://localhost:3000/test?scenario=guest

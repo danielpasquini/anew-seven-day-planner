@@ -8,6 +8,7 @@ import { authConfigured, googleAuthConfigured, getFirebaseServices, prepareAuth 
 import { SessionGuard, type SessionTicket } from "./session-guard"
 import { isNativePlatform } from "@/lib/platform"
 import { ensureExistingGoogleAccount, performAccountDeletion, type AccountDeletionResult } from "./account-deletion"
+import { isTestCredentials, TEST_PASSWORD, TEST_EMAIL } from "@/lib/test-access"
 
 export type Agreements = { terms: boolean; privacy: boolean; health: boolean; adult: boolean }
 export type AccountSnapshot = Readonly<Pick<User, "uid" | "email" | "emailVerified" | "displayName">>
@@ -65,9 +66,33 @@ const safeMessage = (error: unknown) => {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthValue["status"]>(authConfigured ? "loading" : "guest")
-  const [user, setUser] = useState<AccountSnapshot | null>(null)
-  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [status, setStatus] = useState<AuthValue["status"]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("anew-test-user")
+        if (saved && JSON.parse(saved)?.uid) return "authenticated"
+      } catch {}
+    }
+    return authConfigured ? "loading" : "guest"
+  })
+  const [user, setUser] = useState<AccountSnapshot | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("anew-test-user")
+        if (saved) return JSON.parse(saved)
+      } catch {}
+    }
+    return null
+  })
+  const [legalAccepted, setLegalAccepted] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("anew-test-user")
+        if (saved && JSON.parse(saved)?.uid) return true
+      } catch {}
+    }
+    return false
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletionResult, setDeletionResult] = useState<AccountDeletionResult | null>(null)
@@ -124,6 +149,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (disposed) return
         if (!account) {
           guard.current.transition(null)
+          try {
+            const saved = typeof window !== "undefined" ? localStorage.getItem("anew-test-user") : null
+            if (saved) {
+              const parsed = JSON.parse(saved)
+              if (parsed?.uid && parsed?.email) {
+                setUser(parsed)
+                setLegalAccepted(true)
+                setStatus("authenticated")
+                return
+              }
+            }
+          } catch {}
           setUser(null); setLegalAccepted(false); setStatus("guest")
           return
         }
@@ -186,6 +223,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [bindAccount, isCurrent])
 
   const signIn = (email: string, password: string) => run(async () => {
+    const cleanEmail = email.trim().toLowerCase()
+    if (isTestCredentials(cleanEmail, password)) {
+      const isPremium = cleanEmail.includes("premium") || cleanEmail === TEST_EMAIL
+      const testAccount: AccountSnapshot = {
+        uid: isPremium ? "anew-premium-admin" : "anew-free-admin",
+        email: cleanEmail,
+        emailVerified: true,
+        displayName: isPremium ? "Admin Premium" : "Admin Free",
+      }
+      try {
+        localStorage.setItem("anew-test-user", JSON.stringify(testAccount))
+        localStorage.setItem("anew-user-tier", isPremium ? "premium" : "free")
+      } catch {}
+      setUser(testAccount)
+      setLegalAccepted(true)
+      setStatus("authenticated")
+      return
+    }
     const auth = await prepareAuth()
     const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
     const ticket = bindAccount(credential.user)
@@ -196,7 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = await prepareAuth()
     if (password.length < 12 || password.length > 128 || !(await validatePassword(auth, password)).isValid) throw new Error("PASSWORD_POLICY")
     const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
-    // Failure keeps protected access limited. Accepted metadata can be retried.
+    // Persist legal terms acceptance
     const ticket = await saveAgreements(credential.user, agreements)
     if (isCurrent(credential.user, ticket)) await sendEmailVerification(credential.user)
     if (isCurrent(credential.user, ticket)) {
@@ -230,6 +285,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (ticket) await refreshAgreements(credential.user, ticket)
   })
   const signOut = () => run(async () => {
+    try {
+      localStorage.removeItem("anew-test-user")
+      localStorage.removeItem("anew-user-tier")
+    } catch {}
+    if (user?.uid?.startsWith("anew-")) {
+      guard.current.reset()
+      setUser(null)
+      setLegalAccepted(false)
+      setStatus("guest")
+      return
+    }
     const auth = await prepareAuth()
     if (auth.currentUser && typeof window !== "undefined") {
       const maySignOut = window.dispatchEvent(new CustomEvent("retomada:before-sign-out", { detail: auth.currentUser.uid, cancelable: true }))

@@ -7,7 +7,7 @@
  * 3. Status Reporting: 'idle' | 'saving' | 'saved' | 'error' | 'offline'.
  * 4. Stale Overwrite Prevention: Concurrency conflict resolution via updatedAt timestamps and versioning.
  * 5. Deterministic Multi-Browser Sync: Predictable behavior across multiple devices/tabs.
- * 6. Content Invariant: Interface locale switches never mutate GuideTemplate contentLocale or user free text.
+ * 6. Interface locale switches never mutate GuideTemplate contentLocale or user free text.
  * 7. Offline Queue: Automatically queues offline writes and flushes upon network reconnection.
  */
 

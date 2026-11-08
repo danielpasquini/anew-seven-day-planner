@@ -375,7 +375,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
     const beforeDelete = (event: Event) => {
       if (demoMode || !user) return
       if ((event as CustomEvent<string>).detail !== user?.uid) return
-      // A failed remote deletion must leave the most recent edits recoverable.
+      // Flush pending local edits before attempting deletion
       if (!syncEngine.flushLocalPersist()) { event.preventDefault(); return }
       deletionSuspendedRef.current = true
       setDeletionSuspended(true)
@@ -741,17 +741,17 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
           weeks: [initialWeek],
           activeWeekId: "week-1",
         })); initialSaved = true; setStorageIssue(null) } catch {
-          // Retain the initial account write in the same recoverable queue as later edits.
+          // Queue write for offline retry if storage write failed
           syncEngine.scheduleSync({ schemaVersion: 4, guides: startingGuides, activeGuideId: startingGuide.id,
             weeks: [initialWeek], activeWeekId: "week-1", locale, bibleVersion,
             settings: { theme, palette, locale, bibleVersion } }, (payload) => {
               storage.setItem(storageKey, JSON.stringify(payload))
               setStorageIssue(null)
-              if (user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch { /* Saved workspace is authoritative. */ } }
+              if (user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch {} }
             })
           syncEngine.flushLocalPersist()
         }
-        if (initialSaved && user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch { /* The saved workspace remains authoritative. */ } }
+        if (initialSaved && user) { try { storage.removeItem(onboardingDraftKey(user.uid)) } catch {} }
       }
     setReady(true)
   }, [computeProgress, fullAccess, storageKey, storage, loadAttempt])
@@ -1063,7 +1063,7 @@ export function StoreProvider({ children, initialGuide }: { children: React.Reac
 
       const snap = targetWeek.guideSnapshot
       const guideSnapshotConfig = snap?.completionConfig || activeGuide.completionConfig
-      // Use snapshot values for theology/locale isolation (invariants #8, #9, #17)
+      // Use week snapshot settings for theology and locale
       const weekTheologyEnabled = snap?.theologyEnabled === true && activeGuide.theologyEnabled === true
       const weekContentLocale = snap?.contentLocale || activeGuide.contentLocale || locale
 

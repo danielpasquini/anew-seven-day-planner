@@ -1,5 +1,4 @@
-// Global sound state and local storage persistence for Anew
-// Safe for SSR, Webapp, PWA, and Capacitor.
+// Sound settings state store and local storage persistence
 
 export type SoundChannel = "master" | "music" | "ambient" | "sfx"
 

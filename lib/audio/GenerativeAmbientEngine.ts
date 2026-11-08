@@ -1,6 +1,4 @@
-// Generative Ambient Music Engine for Anew
-// Inspired by Brian Eno (Music for Airports), Tero Parviainen asynchronous loops, and HMLA.
-// Soft sine/triangle synthesis with long attack/release envelopes and lowpass filtering.
+// Generative ambient audio loop with soft sine synthesis and slow envelopes
 
 interface ActiveVoice {
   oscillator: OscillatorNode

@@ -31,17 +31,17 @@
 - **Tone of Voice**: Clear, grounded, reflective, clinically accurate, and compassionate.
 - **Capitalization**: *Sentence case* em botões e labels (ex.: *"Complete week"*, *"My guides"*, *"Weekly review"*); *Title Case* moderado apenas em títulos de seções principais editoriais.
 - **Spelling**: Padrão americano (*behavioral*, *counseling*, *judgment*, *program*, *center*).
-- **Termos Técnicos**: Obrigatoriamente alinhados ao [PSYCHOLOGY-GLOSSARY.md](file:///c:/Users/Daniel/Documents/Antigravity/guia-retomada-esquemas/docs/PSYCHOLOGY-GLOSSARY.md).
+- **Termos Técnicos**: Obrigatoriamente alinhados ao [PSYCHOLOGY-GLOSSARY.md](PSYCHOLOGY-GLOSSARY.md).
 
 ---
 
 ## 3. Diretrizes para Conceitos Clínicos e Bíblia
 
-1. **Psicologia**: Qualquer tradução ou novo termo psicológico deve obrigatoriamente consultar o arquivo [`docs/PSYCHOLOGY-GLOSSARY.md`](file:///c:/Users/Daniel/Documents/Antigravity/guia-retomada-esquemas/docs/PSYCHOLOGY-GLOSSARY.md). Não invente termos ou faça traduções literais livres.
+1. **Psicologia**: Qualquer tradução ou novo termo psicológico deve obrigatoriamente consultar o arquivo [`docs/PSYCHOLOGY-GLOSSARY.md`](PSYCHOLOGY-GLOSSARY.md). Não invente termos ou faça traduções literais livres.
 2. **Escritura e Teologia**:
    - Em `pt-BR`: versões **ARA** (Almeida Revista e Atualizada) e **NVT** (Nova Versão Transformadora).
    - Em `en-US`: versões **KJV** (King James Version) e **NIV** (New International Version).
-   - Consulte [`docs/BIBLE-SOURCES.md`](file:///c:/Users/Daniel/Documents/Antigravity/guia-retomada-esquemas/docs/BIBLE-SOURCES.md) para detalhes de copyright e identificadores de API.
+   - Consulte [`docs/BIBLE-SOURCES.md`](BIBLE-SOURCES.md) para detalhes de copyright e identificadores de API.
    - **Regra Absoluta**: Nunca traduza versículos bíblicos de português para inglês via IA ou tradução automática. Utilize sempre as passagens verificadas das versões canônicas resolvidas pelo `BibleProvider`.
 
 ---

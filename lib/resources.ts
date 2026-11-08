@@ -35,10 +35,7 @@ export const RESOURCE_CATEGORIES: { id: ResourceCategory; label: string; labelEn
 export const RESOURCE_LIBRARY_NOTE = "Free English information for learning, everyday support, and personal choice. No therapy approach is ranked. Reading does not replace professional care. Publisher regions describe the source, not service eligibility. External sites have their own privacy and access rules."
 export const RESOURCE_LIBRARY_NOTE_EN = RESOURCE_LIBRARY_NOTE
 
-// Curated English destinations reviewed on 12 October 2026; availability can change.
-// "opened" means English content was read or fetched. "official-reference" means
-// the publisher's indexed English content was checked but automated access was blocked.
-// Link to publications rather than copying or adapting licensed material.
+// Curated educational resources and public self-care publications
 export const FREE_RESOURCES: FreeResource[] = [
   {
     "id": "who-stress",
